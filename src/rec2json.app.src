@@ -1,0 +1,11 @@
+{application, rec2json,
+ [
+  {description, "Library for parsing records and generating utility modules."},
+  {vsn, "0.1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {env, []}
+ ]}.

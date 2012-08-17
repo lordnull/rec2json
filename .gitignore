@@ -1,0 +1,7 @@
+deps
+ebin
+logs
+*.swp
+*.swo
+.eunit
+test/*.beam
