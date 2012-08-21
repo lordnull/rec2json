@@ -1,0 +1,2 @@
+-record(rec1, {bool_it}).
+-record(rec2, {int_it}).
