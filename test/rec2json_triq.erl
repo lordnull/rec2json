@@ -13,6 +13,12 @@ basic() ->
         end
     ).
 
+undefined_skips() ->
+    ?FORALL(Rec,
+        {skippy, oneof([bool(), undefined]), oneof([int(), null, undefined])},
+        {ok, Rec} == skippy:from_json(jsx:to_term(jsx:to_json(Rec:to_json())))
+    ).
+
 multi_rec() ->
     ?FORALL(Rec,
         oneof([
@@ -27,7 +33,7 @@ multi_rec() ->
 
 int_typecheck() ->
     ?FORALL(Rec,
-        {intchecked, oneof([bool(), int()])},
+        {intchecked, oneof([bool(), int(), undefined])},
         case element(2, Rec) of
             Int when is_integer(Int) ->
                 {ok, Rec} == intchecked:from_json(jsx:to_term(jsx:to_json(Rec:to_json())));

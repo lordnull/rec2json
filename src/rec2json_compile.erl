@@ -64,11 +64,12 @@ create_module(RecordName, Fields) ->
     {ok, ModuleDeclaration} = module_declaration(RecordName),
     {ok, ExportDeclaration} = export_declaration(Fields),
     AccessorFuncs = accessor_funcs(Fields),
+    {ok, ToJsonA1} = to_json_arity1_func(Fields),
     {ok, ToJson} = to_json_func(Fields),
     {ok, FromJsonA1} = from_json_arity1_func(RecordName, Fields),
     {ok, FromJson} = from_json_func(Fields),
     %{ok, FromJson} = from_json_func(RecordName, Fields),
-    [ModuleDeclaration, ExportDeclaration] ++ AccessorFuncs ++ [ToJson, FromJsonA1, FromJson].
+    [ModuleDeclaration, ExportDeclaration] ++ AccessorFuncs ++ [ToJsonA1, ToJson, FromJsonA1, FromJson].
     
 atom_to_varname(Atom) ->
     ?log("atom to varname:  ~p", [Atom]),
@@ -111,21 +112,36 @@ accessor_funcs([{K, _Val} | Tail], N, Acc) ->
     {ok, Forms} = erl_parse:parse_form(Tokens),
     accessor_funcs(Tail, N + 1, [Forms | Acc]).
 
-to_json_func(Fields) ->
-    Body = to_json_func(Fields, 2, []),
-    FunctionStr = "to_json(Struct) -> [~s].",
-    FunctionStr1 = lists:flatten(io_lib:format(FunctionStr, [Body])),
+to_json_arity1_func(Fields) ->
+    Length = length(Fields) + 1,
+    FunctionStr = "to_json(Struct) -> to_json(Struct, ~p, []).",
+    FunctionStr1 = lists:flatten(io_lib:format(FunctionStr, [Length])),
     ?log("Function str:  ~p", [FunctionStr1]),
     {ok, Tokens, _Line} = erl_scan:string(FunctionStr1),
     erl_parse:parse_form(Tokens).
 
-to_json_func([], _Num, Acc) ->
-    string:join(lists:reverse(Acc), ",");
+to_json_func(Fields) ->
+    Endings = ["to_json(Struct, 1, []) -> [{}]", "to_json(Struct, 1, Acc) -> Acc"],
+    Looper = "to_json(Struct, ~p = Elem, Acc) ->"
+        "   case element(Elem, Struct) of"
+        "       undefined ->"
+        "           to_json(Struct, Elem - 1, Acc);"
+        "       Value ->"
+        "           to_json(Struct, Elem - 1, [{~s, Value} | Acc])"
+        "   end",
+    Clauses = to_json_func(Fields, Looper, 2, []),
+    Clauses1 = Endings ++ Clauses,
+    FunctionStr = string:join(Clauses1, ";") ++ ".",
+    ?log("Function str:  ~p", [FunctionStr]),
+    {ok, Tokens, _Line} = erl_scan:string(FunctionStr),
+    erl_parse:parse_form(Tokens).
 
-to_json_func([{K, _Type} | Tail], Num, Acc) ->
-    KvString = "{~p, element(~p, Struct)}",
-    KvString1 = lists:flatten(io_lib:format(KvString, [K, Num])),
-    to_json_func(Tail, Num + 1, [KvString1 | Acc]).
+to_json_func([], _LooperStr, _Elem, Acc) ->
+    lists:reverse(Acc);
+
+to_json_func([{K, _Type} | Tail], Str, Elem, Acc) ->
+    Str1 = lists:flatten(io_lib:format(Str, [Elem, K])),
+    to_json_func(Tail, Str, Elem + 1, [Str1 | Acc]).
 
 from_json_arity1_func(RecName, Fields) ->
     Blanks = ["undefined" || _ <- lists:seq(1, length(Fields))],
@@ -153,7 +169,7 @@ from_json_func([], _N, Acc) ->
     {ok, Tokens, _Line} = erl_scan:string(Func),
     erl_parse:parse_form(Tokens);
 
-from_json_func([{K, _Type} | Tail], ElemNum, Acc) ->
+from_json_func([{K, none} | Tail], ElemNum, Acc) ->
     FuncStr = "from_json([{<<\"~s\">>, Value} | Tail], Struct) -> Struct0 = setelement(~p, Struct, Value), from_json(Tail, Struct0);~n",
     FuncStr0 = lists:flatten(io_lib:format(FuncStr, [K, ElemNum])),
     Acc0 = [FuncStr0 | Acc],

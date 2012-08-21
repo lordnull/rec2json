@@ -1,0 +1,1 @@
+-record(skippy, {booly, inty}).
