@@ -34,6 +34,9 @@ test_hrl_files(Conf) ->
 test_hrl_files(HrlFiles, Conf) ->
     test_hrl_files(HrlFiles, Conf, true).
 
+test_hrl_files([], _Conf, false) ->
+    ct:fail("One or more test cases failed.");
+
 test_hrl_files([], _Conf, Acc) ->
     Acc;
 
@@ -44,7 +47,7 @@ test_hrl_files([Filename | Tail], Conf, Acc) ->
     RecTag = filename:basename(Path, ".hrl"),
     test_server:format("~n===== Test case ~p : File ~p =====~n", [self(), RecTag]),
     rec2json_compile:scan_file(Path, [{imports_dir, [filename:join([DataDir, "hrl"])]}]),
-    Test = list_to_atom("rec2json_hrls_" ++ RecTag),
+    Test = list_to_atom(RecTag),
     OnOutput = fun
         (".", _) -> ok;
         (S,F) -> test_server:format(S,F)
@@ -53,9 +56,9 @@ test_hrl_files([Filename | Tail], Conf, Acc) ->
     case Result of
         true ->
             test_server:format("Test ~p:  ok~n~n~n", [RecTag]),
-            Acc andalso true;
+            test_hrl_files(Tail, Conf, Acc andalso true);
         F ->
             test_server:format("Test ~p:  Failed with ~p~n~n~n", [RecTag, Result]),
-            false
+            test_hrl_files(Tail, Conf, false)
     end.
 

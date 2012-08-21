@@ -7,5 +7,5 @@
 basic() ->
     ?FORALL(BasicRec,
         {basic_rec, bool(), unicode_binary(), list(int()), oneof([null, int()])},
-        BasicRec == basic_rec:from_json(BasicRec:to_json())
+        {ok, BasicRec} == basic_rec:from_json(BasicRec:to_json())
     ).
