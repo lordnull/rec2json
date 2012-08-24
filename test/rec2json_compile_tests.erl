@@ -43,7 +43,7 @@ compiled_module_test_() ->
                 {boolean_thing, true}, {maybe_count, null}
             ],
             Rec = #basic_rec{boolean_thing = true, unicode_str = undefined, count = undefined, maybe_count = null},
-            ?assertEqual({ok, Expected}, basic_rec:to_json(Rec))
+            ?assertEqual(Expected, basic_rec:to_json(Rec))
         end},
 
         {"To json, undefined to null", fun() ->
@@ -52,7 +52,7 @@ compiled_module_test_() ->
                 {count, 37}, {maybe_count, null}
             ],
             Rec = #basic_rec{boolean_thing = true, unicode_str = undefined, count = 37, maybe_count = undefined},
-            ?assertEqual({ok, Expected}, basic_rec:to_json(Rec, [{null_is_undefined}]))
+            ?assertEqual(Expected, basic_rec:to_json(Rec, [{null_is_undefined}]))
         end},
 
         {"To json, appending key/values", fun() ->
@@ -61,7 +61,7 @@ compiled_module_test_() ->
                 {count, 37}, {maybe_count, null}, {goober, <<"pants">>}, {<<"id">>, 7}
             ],
             Rec = #basic_rec{boolean_thing = true, unicode_str = <<"hi friend">>, count = 37, maybe_count = null},
-            ?assertEqual({ok, Expected}, basic_rec:to_json(Rec, [{goober, <<"pants">>}, {<<"id">>, 7}]))
+            ?assertEqual(Expected, basic_rec:to_json(Rec, [{goober, <<"pants">>}, {<<"id">>, 7}]))
         end},
 
         {"To json, keys to remove", fun() ->
@@ -69,13 +69,13 @@ compiled_module_test_() ->
                 {unicode_str, null}, {maybe_count, null}
             ],
             Rec = #basic_rec{boolean_thing = true, unicode_str = undefined, count = 37, maybe_count = undefined},
-            ?assertEqual({ok, Expected}, basic_rec:to_json(Rec, [boolean_thing, count, {null_is_undefined}]))
+            ?assertEqual(Expected, basic_rec:to_json(Rec, [boolean_thing, count, {null_is_undefined}]))
         end},
 
         {"To json, all keys removed", fun() ->
             Expected = [{}],
             Rec = #basic_rec{boolean_thing = true, unicode_str = <<"yo">>, count = 37, maybe_count = null},
-            ?assertEqual({ok, Expected}, basic_rec:to_json(Rec, [maybe_count, boolean_thing, unicode_str, count, {null_is_undefined}]))
+            ?assertEqual(Expected, basic_rec:to_json(Rec, [maybe_count, boolean_thing, unicode_str, count, {null_is_undefined}]))
         end},
 
         {"To json, functions to alter json", fun() ->
@@ -91,7 +91,7 @@ compiled_module_test_() ->
             ],
             Rec = #basic_rec{boolean_thing = false, unicode_str = <<"hi friend">>,
                 count = 42, maybe_count = 42},
-            ?assertEqual({ok, Expected}, basic_rec:to_json(Rec, [Fun1, Fun2]))
+            ?assertEqual(Expected, basic_rec:to_json(Rec, [Fun1, Fun2]))
         end},
 
         {"To json, functions return empty list", fun() ->
@@ -101,7 +101,7 @@ compiled_module_test_() ->
             Expected = [{}],
             Rec = #basic_rec{boolean_thing = false, unicode_str = <<"hi friend">>,
                 count = 42, maybe_count = 42},
-            ?assertEqual({ok, Expected}, basic_rec:to_json(Rec, [Fun1]))
+            ?assertEqual(Expected, basic_rec:to_json(Rec, [Fun1]))
         end}
 
     ] end}.
