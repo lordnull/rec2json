@@ -15,9 +15,9 @@ scan_file(Hrl, Opts) ->
 scan_string(Str, Opts) ->
     ?log("scan string"),
     %Imports = proplists:get_value(imports_dir, Opts, []),
-    {ok, Tokens} = erl_scan:string(Str),
-    Forms = erl_parse:parse_form(Tokens),
-    Modules = analyze_forms(Forms),
+    {ok, Tokens, _Line} = erl_scan:string(Str),
+    {ok, Form} = erl_parse:parse_form(Tokens),
+    Modules = analyze_forms([Form]),
     output(Modules, proplists:get_value(output_dir, Opts, ".")).
 
 output([], _OutputDir) ->
@@ -63,14 +63,42 @@ create_module(RecordName, Fields) ->
     ?log("creating module"),
     {ok, ModuleDeclaration} = module_declaration(RecordName),
     {ok, ExportDeclaration} = export_declaration(Fields),
+    {ok, FromOptRecDeclaration} = from_opt_rec_declaration(),
     AccessorFuncs = accessor_funcs(Fields),
     {ok, ToJsonA1} = to_json_arity1_func(Fields),
     {ok, ToJson} = to_json_func(Fields),
     {ok, FromJsonA1} = from_json_arity1_func(RecordName, Fields),
+    {ok, FromJsonA2} = from_json_arity2_func(RecordName, Fields),
     {ok, FromJson} = from_json_func(Fields),
+    BuildFromOptRecFuncs = build_from_opt_rec_func(),
     %{ok, FromJson} = from_json_func(RecordName, Fields),
-    [ModuleDeclaration, ExportDeclaration] ++ AccessorFuncs ++ [ToJsonA1, ToJson, FromJsonA1, FromJson].
-    
+    [ModuleDeclaration, ExportDeclaration, FromOptRecDeclaration] ++ AccessorFuncs ++ [ToJsonA1, ToJson, FromJsonA1, FromJsonA2, FromJson] ++ BuildFromOptRecFuncs.
+
+from_opt_rec_declaration() ->
+    Str = "-record(from_json_opt, {treat_null = null}).",
+    {ok, Tokens, _Line} = erl_scan:string(Str),
+    erl_parse:parse_form(Tokens).
+
+build_from_opt_rec_func() ->
+    FuncA1 = "build_from_opts(Opts) -> build_from_opts(Opts, #from_json_opt{}).",
+    FuncA2 =
+        "build_from_opts([], Rec) ->"
+        "   Rec;"
+        "build_from_opts([null_is_undefined |Tail], Rec) ->"
+        "   Rec2 = Rec#from_json_opt{treat_null = undefined},"
+        "   build_from_opts(Tail, Rec2);"
+        "build_from_opts([{null_is_undefined, true} | Tail], Rec) ->"
+        "   Rec2 = Rec#from_json_opt{treat_null = undefined},"
+        "   build_from_opts(Tail, Rec2);"
+        "build_from_opts([{null_is_undefined, false} | Tail], Rec) ->"
+        "   Rec2 = Rec#from_json_opt{treat_null = null},"
+        "   build_from_opts(Tail, Rec2).",
+    {ok, FuncA1T, _} = erl_scan:string(FuncA1),
+    {ok, FuncA2T, _} = erl_scan:string(FuncA2),
+    {ok, FuncA1F} = erl_parse:parse_form(FuncA1T),
+    {ok, FuncA2F} = erl_parse:parse_form(FuncA2T),
+    [FuncA1F, FuncA2F].
+
 atom_to_varname(Atom) ->
     ?log("atom to varname:  ~p", [Atom]),
     [Chr1 | Rest] = atom_to_list(Atom),
@@ -85,7 +113,7 @@ module_declaration(Name) ->
 
 export_declaration(Fields) ->
     FieldDecs = export_declarations(Fields, []),
-    Decs = ["to_json/1", "from_json/1" | FieldDecs],
+    Decs = ["to_json/1", "from_json/1", "from_json/2" | FieldDecs],
     Decs1 = string:join(Decs, ","),
     String = lists:flatten(io_lib:format("-export([~s]).", [Decs1])),
     {ok, Tokens, _Line} = erl_scan:string(String),
@@ -143,15 +171,25 @@ to_json_func([{K, _Type} | Tail], Str, Elem, Acc) ->
     Str1 = lists:flatten(io_lib:format(Str, [Elem, K])),
     to_json_func(Tail, Str, Elem + 1, [Str1 | Acc]).
 
-from_json_arity1_func(RecName, Fields) ->
+blank_record(RecName, Fields) ->
     Blanks = ["undefined" || _ <- lists:seq(1, length(Fields))],
     TupleBits = [atom_to_list(RecName) | Blanks],
-    BlankTuple = "{" ++ string:join(TupleBits, ",") ++ "}",
-    FromJsonA1Str = "from_json(Json) -> from_json(Json, ~s).",
+    "{" ++ string:join(TupleBits, ",") ++ "}".
+
+from_json_arity1_func(RecName, Fields) ->
+    BlankTuple = blank_record(RecName, Fields),
+    FromJsonA1Str = "from_json(Json) -> from_json(Json, ~s, []).",
     FromJsonA1Str1 = lists:flatten(io_lib:format(FromJsonA1Str, [BlankTuple])),
     {ok, FromJsonA1Tokens, _Line} = erl_scan:string(FromJsonA1Str1),
     %?log("from json A1 forms:  ~p", [FromJsonA1Forms]),
     erl_parse:parse_form(FromJsonA1Tokens).
+
+from_json_arity2_func(RecName, Fields) ->
+    BlankRec = blank_record(RecName, Fields),
+    FromJsonA2Str = "from_json(Json, Opts) -> from_json(Json, ~s, Opts).",
+    FromJsonA2Str1 = lists:flatten(io_lib:format(FromJsonA2Str, [BlankRec])),
+    {ok, FromJsonA2Tokens, _Line} = erl_scan:string(FromJsonA2Str1),
+    erl_parse:parse_form(FromJsonA2Tokens).
 
 from_json_func(Fields) ->
     {ok, PropFuncs} = from_json_func(Fields, 2, []),
@@ -159,19 +197,53 @@ from_json_func(Fields) ->
     {ok, PropFuncs}.
 
 from_json_func([], _N, Acc) ->
-    CatchallFuncStr = "from_json([_ | Tail], Struct) -> from_json(Tail, Struct).",
-    FinishedFuncStr = "from_json([], Struct) -> {ok, Struct};\n",
+    OptionCatcher =
+        "from_json(Json, Struct, Options) when is_list(Options) ->"
+        "   Options2 = build_from_opts(Options),"
+        "   from_json(Json, Struct, Options2);",
+    FinishedFuncStr =
+        "from_json([], Struct, _Options) ->"
+        "   {ok, Struct};",
+    CatchallFuncStr =
+        "from_json([_ | Tail], Struct, Options) ->"
+        "   from_json(Tail, Struct, Options).",
     Acc0 = [CatchallFuncStr | Acc],
     Acc1 = lists:reverse(Acc0),
-    Acc2 = [FinishedFuncStr | Acc1],
+    Acc2 = [OptionCatcher, FinishedFuncStr | Acc1],
     Func = string:join(Acc2, []),
     ?log("from json func str:  ~n~p", [Func]),
     {ok, Tokens, _Line} = erl_scan:string(Func),
     erl_parse:parse_form(Tokens);
 
 from_json_func([{K, none} | Tail], ElemNum, Acc) ->
-    FuncStr = "from_json([{<<\"~s\">>, Value} | Tail], Struct) -> Struct0 = setelement(~p, Struct, Value), from_json(Tail, Struct0);~n",
-    FuncStr0 = lists:flatten(io_lib:format(FuncStr, [K, ElemNum])),
+    BinLabelFuncNull =
+        "from_json([{<<\"~s\">>, null} | Tail], Struct, #from_json_opt{treat_null = undefined} = Opt) ->"
+        "   Struct0 = setelement(~p, Struct, undefined),"
+        "   from_json(Tail, Struct0, Opt);",
+    BinLabelFuncUndef =
+        "from_json([{<<\"~s\">>, null} | Tail], Struct, #from_json_opt{treat_null = null} = Opt) ->"
+        "   Struct0 = setelement(~p, Struct, null),"
+        "   from_json(Tail, Struct0, Opt);",
+    AtomLabelFuncNull =
+        "from_json([{~s, null} | Tail], Struct, #from_json_opt{treat_null = null} = Opt) ->"
+        "   Struct0 = setelement(~p, Struct, null),"
+        "   from_json(Tail, Struct0, Opt);",
+    AtomLabelFuncUndef = 
+        "from_json([{~s, null} | Tail], Struct, #from_json_opt{treat_null = undefined} = Opt) ->"
+        "   Struct0 = setelement(~p, Struct, undefined),"
+        "   from_json(Tail, Struct0, Opt);",
+    BinLabelFuncStr =
+        "from_json([{<<\"~s\">>, Value} | Tail], Struct, Opt) ->"
+        "   Struct0 = setelement(~p, Struct, Value),"
+        "   from_json(Tail, Struct0, Opt);",
+    AtomLabelFuncStr =
+        "from_json([{~s, Value} | Tail], Struct, Opt) ->"
+        "   Struct0 = setelement(~p, Struct, Value),"
+        "   from_json(Tail, Struct0, Opt);",
+    FuncStrs = [BinLabelFuncNull, BinLabelFuncUndef, AtomLabelFuncNull, AtomLabelFuncUndef, BinLabelFuncStr, AtomLabelFuncStr],
+    FuncStr = string:join(FuncStrs, ""),
+    IoArgsList = lists:flatten([[K, ElemNum] || _ <- FuncStrs]),
+    FuncStr0 = lists:flatten(io_lib:format(FuncStr, IoArgsList)),
     Acc0 = [FuncStr0 | Acc],
     from_json_func(Tail, ElemNum + 1, Acc0).
 
@@ -180,18 +252,18 @@ from_json_func([{K, none} | Tail], ElemNum, Acc) ->
 
 
 
-from_json([], Struct) -> {ok, Struct};
-from_json([{<<"boolean_thing">>, Value} | Tail], Struct) ->
-    Struct0 = setelement(2, Struct, Value),
-    from_json(Tail, Struct0);
-from_json([{<<"unicode_str">>, Value} | Tail], Struct) ->
-    Struct0 = setelement(3, Struct, Value),
-    from_json(Tail, Struct0);
-from_json([{<<"count">>, Value} | Tail], Struct) ->
-    Struct0 = setelement(4, Struct, Value),
-    from_json(Tail, Struct0);
-from_json([{<<"maybe_count">>, Value} | Tail], Struct) ->
-    Struct0 = setelement(5, Struct, Value),
-    from_json(Tail, Struct0);
-from_json([_ | Tail], Struct) ->
-    from_json(Tail, Struct).
+%from_json([], Struct) -> {ok, Struct};
+%from_json([{<<"boolean_thing">>, Value} | Tail], Struct) ->
+%    Struct0 = setelement(2, Struct, Value),
+%    from_json(Tail, Struct0);
+%from_json([{<<"unicode_str">>, Value} | Tail], Struct) ->
+%    Struct0 = setelement(3, Struct, Value),
+%    from_json(Tail, Struct0);
+%from_json([{<<"count">>, Value} | Tail], Struct) ->
+%    Struct0 = setelement(4, Struct, Value),
+%    from_json(Tail, Struct0);
+%from_json([{<<"maybe_count">>, Value} | Tail], Struct) ->
+%    Struct0 = setelement(5, Struct, Value),
+%    from_json(Tail, Struct0);
+%from_json([_ | Tail], Struct) ->
+%    from_json(Tail, Struct).
