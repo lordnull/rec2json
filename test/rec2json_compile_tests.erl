@@ -87,7 +87,7 @@ compiled_module_test_() ->
             end,
             Expected = [
                 {propkey, false},{unicode_str, <<"hi friend">>},
-                {count, 42},{maybe_count, null}
+                {count, 42},{maybe_count, 42}
             ],
             Rec = #basic_rec{boolean_thing = false, unicode_str = <<"hi friend">>,
                 count = 42, maybe_count = 42},
