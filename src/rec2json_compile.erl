@@ -49,8 +49,9 @@ analyze_forms([Form | Forms], Acc) ->
         attribute ->
             ?log("attribute analyze:  ~p", [erl_syntax_lib:analyze_attribute(Form)]),
             case erl_syntax_lib:analyze_attribute(Form) of
-                {record, {RecordName, RecordFields}} ->
-                    Mod = create_module(RecordName, RecordFields),
+                {record, {RecordName, _RecordFields}} ->
+                    SimpleFields = simplify_fields(Form),
+                    Mod = create_module(RecordName, SimpleFields),
                     analyze_forms(Forms, [Mod | Acc]);
                 _ ->
                     analyze_forms(Forms, Acc)
@@ -58,6 +59,53 @@ analyze_forms([Form | Forms], Acc) ->
         _ ->
             analyze_forms(Forms, Acc)
     end.
+
+simplify_fields({attribute, _Line, record, {_RecName, Fields}}) ->
+    simplify_fields(Fields, []).
+
+simplify_fields([], Acc) ->
+    lists:reverse(Acc);
+
+simplify_fields([{record_field, _Line, Name} | Tail], Acc) ->
+    Name2 = erl_parse:normalise(Name),
+    simplify_fields(Tail, [{Name2, undefined, any} | Acc]);
+
+simplify_fields([{record_field, _L1, Name, Default} | Tail], Acc) ->
+    Name2 = erl_parse:normalise(Name),
+    Default2 = erl_parse:normaise(Default),
+    simplify_fields(Tail, [{Name2, Default2, any} | Acc]);
+
+simplify_fields([{typed_record_field, {record_field, _L1, Name}, Type} | Tail], Acc) ->
+    Name2 = erl_parse:nomalise(Name),
+    Types = extract_types(Type),
+    simplify_fields(Tail, [{Name2, undefined, Types} | Acc]);
+
+simplify_fields([{typed_record_field, {record_field, _L1, Name, Default}, Type} | Tail], Acc) ->
+    Name2 = erl_parse:normalise(Name),
+    Types = extract_types(Type),
+    Default2 = erl_parse:normalise(Default),
+    simplify_fields(Tail, [{Name2, Default2, Types} | Acc]).
+
+extract_types({type, _L1, union, Types}) ->
+    extract_types(Types, []);
+extract_types(T) when is_tuple(T) ->
+    extract_types([T], []);
+extract_types(T) when is_list(T) ->
+    extract_types(T, []).
+
+extract_types([], Acc) ->
+    Acc;
+extract_types([{type, _L1, union, Types} | Tail], Acc) ->
+    Acc2 = extract_types(Types, Acc),
+    extract_types(Tail, Acc2);
+extract_types([{type, _L1, Type, TypeArgs} | Tail], Acc) ->
+    % most likely not a good idea
+    Normalised = [erl_parse:normalise(TypeArg) || TypeArg <- TypeArgs],
+    Acc2 = [{Type, Normalised} | Acc],
+    extract_types(Tail, Acc2);
+extract_types([Type | Tail], Acc) ->
+    Acc2 = [erl_parse:normalise(Type) | Acc],
+    extract_types(Tail, Acc2).
 
 create_module(RecordName, Fields) ->
     ?log("creating module"),
@@ -73,12 +121,13 @@ create_module(RecordName, Fields) ->
     {ok, FromJsonA1} = from_json_arity1_func(RecordName, Fields),
     {ok, FromJsonA2} = from_json_arity2_func(RecordName, Fields),
     {ok, FromJson} = from_json_func(Fields),
+    ScrubKeys = scrub_keys_func(Fields),
     BuildFromOptRecFuncs = build_from_opt_rec_func(),
     BuildToOptRecFuncs = build_to_opt_rec_func(),
     %{ok, FromJson} = from_json_func(RecordName, Fields),
     [ModuleDeclaration, ExportDeclaration, FromOptRecDeclaration,
         ToOptRecDeclaration] ++ AccessorFuncs ++ [ToJsonA1, ToJsonA2, ToJson,
-        ToJsonTransform, FromJsonA1, FromJsonA2, FromJson] ++
+        ToJsonTransform, FromJsonA1, FromJsonA2, FromJson] ++ ScrubKeys ++
         BuildFromOptRecFuncs ++ BuildToOptRecFuncs.
 
 from_opt_rec_declaration() ->
@@ -142,13 +191,6 @@ parse_string(Str) ->
     {ok, Tokens, _Line} = erl_scan:string(Str),
     erl_parse:parse_form(Tokens).
 
-atom_to_varname(Atom) ->
-    ?log("atom to varname:  ~p", [Atom]),
-    [Chr1 | Rest] = atom_to_list(Atom),
-    [ChrUp] = string:to_upper([Chr1]),
-    Variable = erl_syntax:variable([ChrUp | Rest]),
-    erl_syntax:variable_name(Variable).
-
 module_declaration(Name) ->
     String = lists:flatten(io_lib:format("-module(~p).", [Name])),
     {ok, Tokens, _Line} = erl_scan:string(String),
@@ -165,7 +207,7 @@ export_declaration(Fields) ->
 export_declarations([], Acc) ->
     lists:reverse(Acc);
 
-export_declarations([{K, _Type} | Tail], Acc) ->
+export_declarations([{K, _Default, _Types} | Tail], Acc) ->
     D = lists:flatten(io_lib:format("~p/1", [K])),
     export_declarations(Tail, [D | Acc]).
 
@@ -175,7 +217,7 @@ accessor_funcs(Fields) ->
 accessor_funcs([], _Num, Acc) ->
     lists:reverse(Acc);
 
-accessor_funcs([{K, _Val} | Tail], N, Acc) ->
+accessor_funcs([{K, _Default, _Type} | Tail], N, Acc) ->
     FunctionStr = "~p(Struct) -> element(~p, Struct).",
     FunctionStr1 = lists:flatten(io_lib:format(FunctionStr, [K, N])),
     ?log("function str1:  \n~s", [FunctionStr1]),
@@ -227,7 +269,7 @@ to_json_func(Fields) ->
 to_json_func([], _LooperStr, _Elem, Acc) ->
     lists:reverse(Acc);
 
-to_json_func([{K, _Type} | Tail], Str, Elem, Acc) ->
+to_json_func([{K, _Default, _Types} | Tail], Str, Elem, Acc) ->
     Str1 = lists:flatten(io_lib:format(Str, [Elem, K, K])),
     to_json_func(Tail, Str, Elem + 1, [Str1 | Acc]).
 
@@ -251,13 +293,45 @@ to_json_transform_func() ->
     parse_string(Func).
 
 blank_record(RecName, Fields) ->
-    Blanks = ["undefined" || _ <- lists:seq(1, length(Fields))],
-    TupleBits = [atom_to_list(RecName) | Blanks],
-    "{" ++ string:join(TupleBits, ",") ++ "}".
+    Defaults = [D || {_,D,_} <- Fields],
+    TupleBits = [RecName | Defaults],
+    Tuple = list_to_tuple(TupleBits),
+    lists:flatten(io_lib:format("~p", [Tuple])).
+
+scrub_keys_func(Fields) ->
+    Func =
+        "scrub_keys(Json) ->"
+        "   scrub_keys(Json, []).",
+    Scrubbing = scrub_keys_func(Fields, []),
+    parse_strings([Func, Scrubbing]).
+
+scrub_keys_func([], Acc) ->
+    Catchall =
+        "scrub_keys([_Head | Tail], Acc) ->"
+        "   scrub_keys(Tail, Acc).",
+    CatchAtom =
+        "scrub_keys([{Key, _} = Head | Tail], Acc) when is_atom(Key) ->"
+        "   scrub_keys(Tail, [Head | Acc])",
+    Ending =
+        "scrub_keys([], Acc) ->"
+        "   lists:reverse(Acc)",
+    Acc2 = [Catchall, CatchAtom | Acc],
+    Acc3 = [Ending | lists:reverse(Acc2)],
+    string:join(Acc3, ";");
+
+scrub_keys_func([{Name, _Default, _Types} | Tail], Acc) ->
+    ClauseStr =
+        "scrub_keys([{<<\"~s\">>, Val} | Tail], Acc) ->"
+        "   scrub_keys(Tail, [{~s, Val} | Acc])",
+    ClauseStr2 = lists:flatten(io_lib:format(ClauseStr, [Name, Name])),
+    scrub_keys_func(Tail, [ClauseStr2 | Acc]).
 
 from_json_arity1_func(RecName, Fields) ->
     BlankTuple = blank_record(RecName, Fields),
-    FromJsonA1Str = "from_json(Json) -> from_json(Json, ~s, []).",
+    FromJsonA1Str =
+        "from_json(Json) ->"
+        "   Json2 = scrub_keys(Json),"
+        "   from_json(Json2, ~s, []).",
     FromJsonA1Str1 = lists:flatten(io_lib:format(FromJsonA1Str, [BlankTuple])),
     {ok, FromJsonA1Tokens, _Line} = erl_scan:string(FromJsonA1Str1),
     %?log("from json A1 forms:  ~p", [FromJsonA1Forms]),
@@ -265,17 +339,15 @@ from_json_arity1_func(RecName, Fields) ->
 
 from_json_arity2_func(RecName, Fields) ->
     BlankRec = blank_record(RecName, Fields),
-    FromJsonA2Str = "from_json(Json, Opts) -> from_json(Json, ~s, Opts).",
+    FromJsonA2Str =
+        "from_json(Json, Opts) ->"
+        "   Json2 = scrub_keys(Json),"
+        "   from_json(Json2, ~s, Opts).",
     FromJsonA2Str1 = lists:flatten(io_lib:format(FromJsonA2Str, [BlankRec])),
     {ok, FromJsonA2Tokens, _Line} = erl_scan:string(FromJsonA2Str1),
     erl_parse:parse_form(FromJsonA2Tokens).
 
 from_json_func(Fields) ->
-    {ok, PropFuncs} = from_json_func(Fields, 2, []),
-    ?log("from json prop funcs:  ~p", [PropFuncs]),
-    {ok, PropFuncs}.
-
-from_json_func([], _N, Acc) ->
     OptionCatcher =
         "from_json(Json, Struct, Options) when is_list(Options) ->"
         "   Options2 = build_from_opts(Options),"
@@ -283,53 +355,59 @@ from_json_func([], _N, Acc) ->
     FinishedFuncStr =
         "from_json([], Struct, _Options) ->"
         "   {ok, Struct};",
+    Acc = [FinishedFuncStr, OptionCatcher],
+    {ok, PropFuncs} = from_json_func(Fields, 2, Acc),
+    ?log("from json prop funcs:  ~p", [PropFuncs]),
+    {ok, PropFuncs}.
+
+from_json_func([], _N, Acc) ->
     CatchallFuncStr =
         "from_json([_ | Tail], Struct, Options) ->"
         "   from_json(Tail, Struct, Options).",
     Acc0 = [CatchallFuncStr | Acc],
     Acc1 = lists:reverse(Acc0),
-    Acc2 = [OptionCatcher, FinishedFuncStr | Acc1],
-    Func = string:join(Acc2, []),
+    Func = string:join(Acc1, ""),
     ?log("from json func str:  ~n~p", [Func]),
     {ok, Tokens, _Line} = erl_scan:string(Func),
     erl_parse:parse_form(Tokens);
 
-from_json_func([{K, none} | Tail], ElemNum, Acc) ->
-    BinLabelFuncNull =
-        "from_json([{<<\"~s\">>, null} | Tail], Struct, #from_json_opt{treat_null = undefined} = Opt) ->"
-        "   Struct0 = setelement(~p, Struct, undefined),"
-        "   from_json(Tail, Struct0, Opt);",
-    BinLabelFuncUndef =
-        "from_json([{<<\"~s\">>, null} | Tail], Struct, #from_json_opt{treat_null = null} = Opt) ->"
-        "   Struct0 = setelement(~p, Struct, null),"
-        "   from_json(Tail, Struct0, Opt);",
-    AtomLabelFuncNull =
+from_json_func([{K, _Default, Types} | Tail], ElemNum, Acc) ->
+    Clauses = from_json_type_clauses(K, Types, ElemNum),
+    Acc2 = lists:append(Acc, Clauses),
+    from_json_func(Tail, ElemNum + 1, Acc2).
+
+from_json_type_clauses(Key, any, ElemNum) ->
+    from_json_type_clauses(Key, [any, undefined, null], ElemNum);
+
+from_json_type_clauses(Key, Types, ElemNum) ->
+    from_json_type_clauses(Key, Types, ElemNum, []).
+
+from_json_type_clauses(_Key, [], _ElemNum, Acc) ->
+    lists:reverse(Acc);
+
+from_json_type_clauses(Key, [null | Tail], ElemNum, Acc) ->
+    Str =
         "from_json([{~s, null} | Tail], Struct, #from_json_opt{treat_null = null} = Opt) ->"
         "   Struct0 = setelement(~p, Struct, null),"
         "   from_json(Tail, Struct0, Opt);",
-    AtomLabelFuncUndef = 
+    Str2 = lists:flatten(io_lib:format(Str, [Key, ElemNum])),
+    from_json_type_clauses(Key, Tail, ElemNum, [Str2 | Acc]);
+
+from_json_type_clauses(Key, [undefined | Tail], ElemNum, Acc) ->
+    Str =
         "from_json([{~s, null} | Tail], Struct, #from_json_opt{treat_null = undefined} = Opt) ->"
         "   Struct0 = setelement(~p, Struct, undefined),"
         "   from_json(Tail, Struct0, Opt);",
-    BinLabelFuncStr =
-        "from_json([{<<\"~s\">>, Value} | Tail], Struct, Opt) ->"
-        "   Struct0 = setelement(~p, Struct, Value),"
-        "   from_json(Tail, Struct0, Opt);",
-    AtomLabelFuncStr =
+    Str2 = lists:flatten(io_lib:format(Str, [Key, ElemNum])),
+    from_json_type_clauses(Key, Tail, ElemNum, [Str2 | Acc]);
+
+from_json_type_clauses(Key, [any | Tail], ElemNum, Acc) ->
+    Str =
         "from_json([{~s, Value} | Tail], Struct, Opt) ->"
         "   Struct0 = setelement(~p, Struct, Value),"
         "   from_json(Tail, Struct0, Opt);",
-    FuncStrs = [BinLabelFuncNull, BinLabelFuncUndef, AtomLabelFuncNull, AtomLabelFuncUndef, BinLabelFuncStr, AtomLabelFuncStr],
-    FuncStr = string:join(FuncStrs, ""),
-    IoArgsList = lists:flatten([[K, ElemNum] || _ <- FuncStrs]),
-    FuncStr0 = lists:flatten(io_lib:format(FuncStr, IoArgsList)),
-    Acc0 = [FuncStr0 | Acc],
-    from_json_func(Tail, ElemNum + 1, Acc0).
-
-
-
-
-
+    Str2 = lists:flatten(io_lib:format(Str, [Key, ElemNum])),
+    from_json_type_clauses(Key, Tail, ElemNum, [Str2 | Acc]).
 
 %from_json([], Struct) -> {ok, Struct};
 %from_json([{<<"boolean_thing">>, Value} | Tail], Struct) ->
