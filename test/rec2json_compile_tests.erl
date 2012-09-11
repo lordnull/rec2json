@@ -9,13 +9,6 @@
     maybe_count
 }).
 
--record(typed_rec, {
-    bool_or_undef :: boolean(),
-    bool = false :: boolean(),
-    int_or_undef :: integer(),
-    int = 0 :: integer()
-}).
-
 basic_compiled_module_test_() ->
     {setup, fun() ->
         RecDefinition = "-record(basic_rec, { boolean_thing, unicode_str, count, maybe_count }).",
@@ -119,6 +112,13 @@ basic_compiled_module_test_() ->
 
     ] end}.
 
+-record(typed_rec, {
+    bool_or_undef :: boolean(),
+    bool = false :: boolean(),
+    int_or_undef :: integer(),
+    int = 0 :: integer()
+}).
+
 typed_compile_module_test_() ->
     {setup, fun() ->
         RecDefinition =
@@ -154,9 +154,9 @@ typed_compile_module_test_() ->
         {"From json, nulls converted to undefined", fun() ->
             Json = [
                 {bool_or_undef, null}, {<<"bool">>, true},
-                {<<"int_or_undef">>, 27}, {int, null}
+                {<<"int_or_undef">>, null}, {int, 27}
             ],
-            Expected = #typed_rec{bool_or_undef = undefined, bool = true, int_or_undef = 27, int = null},
+            Expected = #typed_rec{bool_or_undef = undefined, bool = true, int_or_undef = undefined, int = 27},
             ?assertEqual({ok, Expected}, typed_rec:from_json(Json, [null_is_undefined]))
         end},
 
@@ -174,7 +174,7 @@ typed_compile_module_test_() ->
                 {int_or_undef, null}, {int, 0}
             ],
             Rec = #typed_rec{},
-            ?assertEqual(Expected, basic_rec:to_json(Rec, [{null_is_undefined}]))
+            ?assertEqual(Expected, typed_rec:to_json(Rec, [{null_is_undefined}]))
         end},
 
         {"To json, appending key/values", fun() ->
@@ -196,7 +196,7 @@ typed_compile_module_test_() ->
         {"To json, all keys removed", fun() ->
             Expected = [{}],
             Rec = #typed_rec{},
-            ?assertEqual(Expected, basic_rec:to_json(Rec, [bool, int]))
+            ?assertEqual(Expected, typed_rec:to_json(Rec, [bool, int]))
         end},
 
         {"To json, functions to alter json", fun() ->

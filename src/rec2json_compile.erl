@@ -77,12 +77,13 @@ simplify_fields([{record_field, _Line, Name} | Tail], Acc) ->
     simplify_fields(Tail, [{Name2, undefined, {any, []}} | Acc]);
 
 simplify_fields([{record_field, _L1, Name, Default} | Tail], Acc) ->
+    ?log("Name with default:  ~p, ~p", [Name, Default]),
     Name2 = erl_parse:normalise(Name),
     Default2 = erl_parse:normaise(Default),
     simplify_fields(Tail, [{Name2, Default2, {any, []}} | Acc]);
 
 simplify_fields([{typed_record_field, {record_field, _L1, Name}, Type} | Tail], Acc) ->
-    Name2 = erl_parse:nomalise(Name),
+    Name2 = erl_parse:normalise(Name),
     Types = extract_types(Type),
     simplify_fields(Tail, [{Name2, undefined, Types} | Acc]);
 
@@ -413,10 +414,7 @@ from_json_type_clauses(Key, {any, []}, ElemNum, Acc) ->
     lists:reverse(Acc2);
 
 from_json_type_clauses(_Key, {_Any, []}, _ElemNum, Acc) ->
-    CatchAllStr =
-        "from_json([_ | Tail], Struct, Opt) ->"
-        "   from_json(Tail, Struct, Opt)",
-    lists:reverse([CatchAllStr | Acc]);
+    lists:reverse(Acc);
 
 from_json_type_clauses(Key, {Any, [null | Tail]}, ElemNum, Acc) ->
     Str =
@@ -432,6 +430,22 @@ from_json_type_clauses(Key, {Any, [undefined | Tail]}, ElemNum, Acc) ->
         "from_json([{~s, null} | Tail], Struct, #from_json_opt{treat_null = undefined} = Opt) ->"
         "   io:format(\"null is undefined~n\"),"
         "   Struct0 = setelement(~p, Struct, undefined),"
+        "   from_json(Tail, Struct0, Opt)",
+    Str2 = lists:flatten(io_lib:format(Str, [Key, ElemNum])),
+    from_json_type_clauses(Key, {Any, Tail}, ElemNum, [Str2 | Acc]);
+
+from_json_type_clauses(Key, {Any, [{boolean, []} | Tail]}, ElemNum, Acc) ->
+    Str =
+        "from_json([{~s, Val} | Tail], Struct, Opt) when is_boolean(Val) ->"
+        "   Struct0 = setelement(~p, Struct, Val),"
+        "   from_json(Tail, Struct0, Opt)",
+    Str2 = lists:flatten(io_lib:format(Str, [Key, ElemNum])),
+    from_json_type_clauses(Key, {Any, Tail}, ElemNum, [Str2 | Acc]);
+
+from_json_type_clauses(Key, {Any, [{integer, []} | Tail]}, ElemNum, Acc) ->
+    Str =
+        "from_json([{~s, Val} | Tail], Struct, Opt) when is_integer(Val) ->"
+        "   Struct0 = setelement(~p, Struct, Val),"
         "   from_json(Tail, Struct0, Opt)",
     Str2 = lists:flatten(io_lib:format(Str, [Key, ElemNum])),
     from_json_type_clauses(Key, {Any, Tail}, ElemNum, [Str2 | Acc]).
