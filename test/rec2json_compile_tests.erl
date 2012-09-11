@@ -160,6 +160,18 @@ typed_compile_module_test_() ->
             ?assertEqual({ok, Expected}, typed_rec:from_json(Json, [null_is_undefined]))
         end},
 
+        {"From json, type mismatchs gives warning", fun() ->
+            Json = [
+                {bool_or_undef, <<"string">>}, {<<"bool">>, 27}, {int_or_undef, true}, {int, null}
+            ],
+            Expected = #typed_rec{bool_or_undef = <<"string">>, bool = 27, int_or_undef = true, int = null},
+            Out = typed_rec:from_json(Json),
+            ?assertMatch({ok, Expected, _WarnList}, Out),
+            {ok, _, WarnList} = Out,
+            ExpectedWarnings = [bool_or_undef, bool, int_or_undef, int],
+            [?assert(lists:member(W, ExpectedWarnings)) || W <- WarnList]
+        end},
+
         {"To json, undefined skipped", fun() ->
             Expected = [
                 {bool, false},{int, 0}
