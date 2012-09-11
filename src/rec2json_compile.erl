@@ -2,8 +2,14 @@
 
 -export([scan_file/2, scan_string/2]).
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-define(log(Msg, Args), ?debugFmt(Msg, Args)).
+-define(log(Msg), ?log(Msg, [])).
+-else.
 -define(log(Msg, Args), io:format("~s:~p " ++ Msg ++ "\n", [?MODULE, ?LINE | Args])).
 -define(log(Msg), ?log(Msg, [])).
+-endif.
 
 scan_file(Hrl, Opts) ->
     ?log("scan file"),
@@ -68,12 +74,12 @@ simplify_fields([], Acc) ->
 
 simplify_fields([{record_field, _Line, Name} | Tail], Acc) ->
     Name2 = erl_parse:normalise(Name),
-    simplify_fields(Tail, [{Name2, undefined, any} | Acc]);
+    simplify_fields(Tail, [{Name2, undefined, {any, []}} | Acc]);
 
 simplify_fields([{record_field, _L1, Name, Default} | Tail], Acc) ->
     Name2 = erl_parse:normalise(Name),
     Default2 = erl_parse:normaise(Default),
-    simplify_fields(Tail, [{Name2, Default2, any} | Acc]);
+    simplify_fields(Tail, [{Name2, Default2, {any, []}} | Acc]);
 
 simplify_fields([{typed_record_field, {record_field, _L1, Name}, Type} | Tail], Acc) ->
     Name2 = erl_parse:nomalise(Name),
@@ -94,7 +100,13 @@ extract_types(T) when is_list(T) ->
     extract_types(T, []).
 
 extract_types([], Acc) ->
-    Acc;
+    case lists:member(any, Acc) of
+        true ->
+            Acc2 = lists:delete(any, Acc),
+            {any, Acc2};
+        false ->
+            {specific, Acc}
+    end;
 extract_types([{type, _L1, union, Types} | Tail], Acc) ->
     Acc2 = extract_types(Types, Acc),
     extract_types(Tail, Acc2);
@@ -351,22 +363,21 @@ from_json_func(Fields) ->
     OptionCatcher =
         "from_json(Json, Struct, Options) when is_list(Options) ->"
         "   Options2 = build_from_opts(Options),"
-        "   from_json(Json, Struct, Options2);",
+        "   from_json(Json, Struct, Options2)",
     FinishedFuncStr =
         "from_json([], Struct, _Options) ->"
-        "   {ok, Struct};",
+        "   {ok, Struct}",
     Acc = [FinishedFuncStr, OptionCatcher],
     {ok, PropFuncs} = from_json_func(Fields, 2, Acc),
     ?log("from json prop funcs:  ~p", [PropFuncs]),
     {ok, PropFuncs}.
 
 from_json_func([], _N, Acc) ->
-    CatchallFuncStr =
-        "from_json([_ | Tail], Struct, Options) ->"
-        "   from_json(Tail, Struct, Options).",
-    Acc0 = [CatchallFuncStr | Acc],
-    Acc1 = lists:reverse(Acc0),
-    Func = string:join(Acc1, ""),
+    CatchAll =
+        "from_json([_|Tail], Struct, Options) ->"
+        "   from_json(Tail, Struct, Options)",
+    Acc2 = lists:append(Acc, [CatchAll]),
+    Func = string:join(Acc2, ";\n") ++ ".",
     ?log("from json func str:  ~n~p", [Func]),
     {ok, Tokens, _Line} = erl_scan:string(Func),
     erl_parse:parse_form(Tokens);
@@ -377,37 +388,53 @@ from_json_func([{K, _Default, Types} | Tail], ElemNum, Acc) ->
     from_json_func(Tail, ElemNum + 1, Acc2).
 
 from_json_type_clauses(Key, any, ElemNum) ->
-    from_json_type_clauses(Key, [any, undefined, null], ElemNum);
+    from_json_type_clauses(Key, {any, []}, ElemNum);
 
 from_json_type_clauses(Key, Types, ElemNum) ->
     from_json_type_clauses(Key, Types, ElemNum, []).
 
-from_json_type_clauses(_Key, [], _ElemNum, Acc) ->
-    lists:reverse(Acc);
-
-from_json_type_clauses(Key, [null | Tail], ElemNum, Acc) ->
-    Str =
+from_json_type_clauses(Key, {any, []}, ElemNum, Acc) ->
+    NullIsNullStr =
         "from_json([{~s, null} | Tail], Struct, #from_json_opt{treat_null = null} = Opt) ->"
         "   Struct0 = setelement(~p, Struct, null),"
-        "   from_json(Tail, Struct0, Opt);",
-    Str2 = lists:flatten(io_lib:format(Str, [Key, ElemNum])),
-    from_json_type_clauses(Key, Tail, ElemNum, [Str2 | Acc]);
-
-from_json_type_clauses(Key, [undefined | Tail], ElemNum, Acc) ->
-    Str =
+        "   from_json(Tail, Struct0, Opt)",
+    NullIsNullStr2 = lists:flatten(io_lib:format(NullIsNullStr, [Key, ElemNum])),
+    NullIsUndefStr =
         "from_json([{~s, null} | Tail], Struct, #from_json_opt{treat_null = undefined} = Opt) ->"
         "   Struct0 = setelement(~p, Struct, undefined),"
-        "   from_json(Tail, Struct0, Opt);",
-    Str2 = lists:flatten(io_lib:format(Str, [Key, ElemNum])),
-    from_json_type_clauses(Key, Tail, ElemNum, [Str2 | Acc]);
+        "   from_json(Tail, Struct0, Opt)",
+    NullIsUndefStr2 = lists:flatten(io_lib:format(NullIsUndefStr, [Key, ElemNum])),
+    AllOthersStr =
+        "from_json([{~s, Val} | Tail], Struct, Opt) ->"
+        "   Struct0 = setelement(~p, Struct, Val),"
+        "   from_json(Tail, Struct0, Opt)",
+    AllOthersStr2 = lists:flatten(io_lib:format(AllOthersStr, [Key, ElemNum])),
+    Acc2 = [AllOthersStr2, NullIsUndefStr2, NullIsNullStr2 | Acc],
+    lists:reverse(Acc2);
 
-from_json_type_clauses(Key, [any | Tail], ElemNum, Acc) ->
+from_json_type_clauses(_Key, {_Any, []}, _ElemNum, Acc) ->
+    CatchAllStr =
+        "from_json([_ | Tail], Struct, Opt) ->"
+        "   from_json(Tail, Struct, Opt)",
+    lists:reverse([CatchAllStr | Acc]);
+
+from_json_type_clauses(Key, {Any, [null | Tail]}, ElemNum, Acc) ->
     Str =
-        "from_json([{~s, Value} | Tail], Struct, Opt) ->"
-        "   Struct0 = setelement(~p, Struct, Value),"
-        "   from_json(Tail, Struct0, Opt);",
+        "from_json([{~s, null} | Tail], Struct, #from_json_opt{treat_null = null} = Opt) ->"
+        "   io:format(\"null is null~n\"),"
+        "   Struct0 = setelement(~p, Struct, null),"
+        "   from_json(Tail, Struct0, Opt)",
     Str2 = lists:flatten(io_lib:format(Str, [Key, ElemNum])),
-    from_json_type_clauses(Key, Tail, ElemNum, [Str2 | Acc]).
+    from_json_type_clauses(Key, {Any, Tail}, ElemNum, [Str2 | Acc]);
+
+from_json_type_clauses(Key, {Any, [undefined | Tail]}, ElemNum, Acc) ->
+    Str =
+        "from_json([{~s, null} | Tail], Struct, #from_json_opt{treat_null = undefined} = Opt) ->"
+        "   io:format(\"null is undefined~n\"),"
+        "   Struct0 = setelement(~p, Struct, undefined),"
+        "   from_json(Tail, Struct0, Opt)",
+    Str2 = lists:flatten(io_lib:format(Str, [Key, ElemNum])),
+    from_json_type_clauses(Key, {Any, Tail}, ElemNum, [Str2 | Acc]).
 
 %from_json([], Struct) -> {ok, Struct};
 %from_json([{<<"boolean_thing">>, Value} | Tail], Struct) ->
