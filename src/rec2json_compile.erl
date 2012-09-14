@@ -14,9 +14,21 @@
 scan_file(Hrl, Opts) ->
     ?log("scan file"),
     Imports = proplists:get_value(imports_dir, Opts, []),
-    {ok, Forms} = epp:parse_file(Hrl, Imports, []),
+    {ok, Handle} = epp:open(Hrl, Imports, []),
+    {ok, Forms} = read_epp_forms(Handle),
     Modules = analyze_forms(Forms),
     output(Modules, proplists:get_value(output_dir, Opts, ".")).
+
+read_epp_forms(Handle) ->
+    read_epp_forms(Handle, []).
+
+read_epp_forms(Handle, Acc) ->
+    case epp:parse_erl_form(Handle) of
+        {ok, Form} ->
+            read_epp_forms(Handle, [Form | Acc]);
+        {eof, _L} ->
+            {ok, lists:reverse(Acc)}
+    end.
 
 scan_string(Str, Opts) ->
     ?log("scan string"),

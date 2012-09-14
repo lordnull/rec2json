@@ -34,9 +34,15 @@ multi_rec() ->
 int_typecheck() ->
     ?FORALL(Rec,
         {intchecked, oneof([bool(), int(), undefined])},
-        case element(2, Rec) of
-            Int when is_integer(Int) ->
-                {ok, Rec} == intchecked:from_json(jsx:to_term(jsx:to_json(Rec:to_json())));
-            _Bool ->
-                {error, {intchecked, undefined}, [{counted, type_mismatch}]} == intchecked:from_json(jsx:to_term(jsx:to_json(Rec:to_json())))
+        begin
+            Output = intchecked:from_json(jsx:to_term(jsx:to_json(Rec:to_json()))),
+            io:format("output:  ~p~n", [Output]),
+            case element(2, Rec) of
+                Int when is_integer(Int) ->
+                    Output == {ok, Rec};
+                undefined ->
+                    Output == {ok, Rec};
+                _NotInt ->
+                    {ok, Rec, [counted]} == Output
+            end
         end).

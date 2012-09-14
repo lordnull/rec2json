@@ -1,1 +1,1 @@
--record(intchecked, {inter :: int()}).
+-record(intchecked, {counted :: integer()}).
