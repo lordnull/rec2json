@@ -26,7 +26,6 @@
 -endif.
 
 scan_file(Hrl, Opts) ->
-    ?log("scan file"),
     Imports = proplists:get_value(imports_dir, Opts, []),
     {ok, Handle} = epp:open(Hrl, Imports, []),
     {ok, Forms} = read_epp_forms(Handle),
@@ -45,7 +44,6 @@ read_epp_forms(Handle, Acc) ->
     end.
 
 scan_string(Str, Opts) ->
-    ?log("scan string"),
     %Imports = proplists:get_value(imports_dir, Opts, []),
     {ok, Tokens, _Line} = erl_scan:string(Str),
     {ok, Form} = erl_parse:parse_form(Tokens),
@@ -53,33 +51,23 @@ scan_string(Str, Opts) ->
     output(Modules, proplists:get_value(output_dir, Opts, ".")).
 
 output([], _OutputDir) ->
-    ?log("output done"),
     ok;
 
 output([Module | Tail], OutputDir) ->
-    ?log("outputing:  ~p", [Module]),
-    ?log("pretty"),
-    [?log("~p", [lists:flatten(erl_pp:form(F))]) || F <- Module],
     {ok, ModName, Bin, _Warnings} = compile:forms(Module, [return]),
-    ?log("module:  ~p", [ModName]),
     File = filename:join(OutputDir, atom_to_list(ModName) ++ ".beam"),
     WriteRes = file:write_file(File, Bin),
-    ?log("write res:  ~p", [WriteRes]),
     output(Tail, OutputDir).
 
 analyze_forms(Forms) ->
     analyze_forms(Forms, []).
 
 analyze_forms([], Acc) ->
-    ?log("forms analysis done:  ~p", [Acc]),
     lists:reverse(Acc);
 
 analyze_forms([Form | Forms], Acc) ->
-    ?log("analyzing form:  ~p", [Form]),
-    ?log("Type:  ~p", [erl_syntax:type(Form)]),
     case erl_syntax:type(Form) of
         attribute ->
-            ?log("attribute analyze:  ~p", [erl_syntax_lib:analyze_attribute(Form)]),
             case erl_syntax_lib:analyze_attribute(Form) of
                 {record, {RecordName, _RecordFields}} ->
                     SimpleFields = simplify_fields(Form),
@@ -103,7 +91,6 @@ simplify_fields([{record_field, _Line, Name} | Tail], Acc) ->
     simplify_fields(Tail, [{Name2, undefined, {any, []}} | Acc]);
 
 simplify_fields([{record_field, _L1, Name, Default} | Tail], Acc) ->
-    ?log("Name with default:  ~p, ~p", [Name, Default]),
     Name2 = erl_parse:normalise(Name),
     Default2 = erl_parse:normalise(Default),
     simplify_fields(Tail, [{Name2, Default2, {any, []}} | Acc]);
@@ -143,7 +130,6 @@ extract_types([{type, _L1, list, ListTypes} | Tail], Acc) ->
     extract_types(Tail, Acc2);
 extract_types([{type, _L1, Type, TypeArgs} | Tail], Acc) ->
     % most likely not a good idea
-    ?log("type:  ~p;  type args:  ~p", [Type, TypeArgs]),
     Normalised = [erl_parse:normalise(TypeArg) || TypeArg <- TypeArgs],
     Acc2 = [{Type, Normalised} | Acc],
     extract_types(Tail, Acc2);
@@ -152,7 +138,6 @@ extract_types([Type | Tail], Acc) ->
     extract_types(Tail, Acc2).
 
 create_module(RecordName, Fields) ->
-    ?log("creating module"),
     {ok, ModuleDeclaration} = module_declaration(RecordName),
     {ok, ExportDeclaration} = export_declaration(Fields),
     {ok, FromOptRecDeclaration} = from_opt_rec_declaration(),
@@ -264,7 +249,6 @@ accessor_funcs([], _Num, Acc) ->
 accessor_funcs([{K, _Default, _Type} | Tail], N, Acc) ->
     FunctionStr = "~p(Struct) -> element(~p, Struct).",
     FunctionStr1 = lists:flatten(io_lib:format(FunctionStr, [K, N])),
-    ?log("function str1:  \n~s", [FunctionStr1]),
     {ok, Tokens, _Line} = erl_scan:string(FunctionStr1),
     {ok, Forms} = erl_parse:parse_form(Tokens),
     accessor_funcs(Tail, N + 1, [Forms | Acc]).
@@ -306,7 +290,6 @@ to_json_func(Fields) ->
     Clauses = to_json_func(Fields, Looper, 2, []),
     Clauses1 = [Ending, OptionTrap] ++ Clauses,
     FunctionStr = string:join(Clauses1, ";") ++ ".",
-    ?log("Function str:  ~p", [FunctionStr]),
     {ok, Tokens, _Line} = erl_scan:string(FunctionStr),
     erl_parse:parse_form(Tokens).
 
@@ -378,7 +361,6 @@ from_json_arity1_func(RecName, Fields) ->
         "   from_json(Json2, ~s, [], []).",
     FromJsonA1Str1 = lists:flatten(io_lib:format(FromJsonA1Str, [BlankTuple])),
     {ok, FromJsonA1Tokens, _Line} = erl_scan:string(FromJsonA1Str1),
-    %?log("from json A1 forms:  ~p", [FromJsonA1Forms]),
     erl_parse:parse_form(FromJsonA1Tokens).
 
 from_json_arity2_func(RecName, Fields) ->
@@ -406,7 +388,6 @@ from_json_func(Fields) ->
         "   end",
     Acc = [FinishedFuncStr, OptionCatcher],
     {ok, PropFuncs} = from_json_func(Fields, 2, Acc),
-    ?log("from json prop funcs:  ~p", [PropFuncs]),
     {ok, PropFuncs}.
 
 from_json_func([], _N, Acc) ->
@@ -415,7 +396,6 @@ from_json_func([], _N, Acc) ->
         "   from_json(Tail, Struct, Options, Warns)",
     Acc2 = lists:append(Acc, [CatchAll]),
     Func = string:join(Acc2, ";\n") ++ ".",
-    ?log("from json func str:  ~n~p", [Func]),
     {ok, Tokens, _Line} = erl_scan:string(Func),
     erl_parse:parse_form(Tokens);
 
