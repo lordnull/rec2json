@@ -146,8 +146,9 @@ a new one:
 
     {ok, Record2} = Record:from_json(Json).
     {ok, Record2} = person:from_json(Json, Record).
+    {ok, Record2} = person:from_json(Record, Json).
     {ok, Record2} = Record:from_json(Json, [null_is_undefined]).
-    {ok, Record2} = person:from_json(Json, Record, [null_is_undefined]).
+    {ok, Record2} = person:from_json(Record, Json, [null_is_undefined]).
 
 If the json struction has a type that connot be reconciled with a type
 specified by the record definition, a list of fields with possible errors
