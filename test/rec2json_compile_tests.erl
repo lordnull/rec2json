@@ -137,7 +137,7 @@ feature_test_() ->
         {"from json with null as undefined", fun() ->
             Expected = #included{field = undefined},
             Json = [{field, null}],
-            ?assertEqual({ok, Expected}, included:from_json(Json))
+            ?assertEqual({ok, Expected}, included:from_json(Json, [null_is_undefined]))
         end},
 
         {"from json with included record", fun() ->
