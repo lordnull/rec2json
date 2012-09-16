@@ -19,7 +19,7 @@ Features that are not full implemented are marked with (WIP).
 * Atom 'undefined' fields in records optionally skipped or set to null.
 * Atom 'null' in json optionally converted to 'undefined'.
 * Post processing options on record -> json convertion.
-* (WIP) Seed json -> record conversion with a record.
+* Seed json -> record conversion with a record.
 * (WIP) Nested json -> record and record -> json conversions for other
 records that have been compiled using rec2json.
 * Resulting modules have no dependency on rec2json.
