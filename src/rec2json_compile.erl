@@ -257,13 +257,16 @@ to_json_arity1_func(Fields) ->
     Length = length(Fields) + 1,
     FunctionStr = "to_json(Struct) -> to_json(Struct, ~p, [], []).",
     FunctionStr1 = lists:flatten(io_lib:format(FunctionStr, [Length])),
-    ?log("Function str:  ~p", [FunctionStr1]),
     {ok, Tokens, _Line} = erl_scan:string(FunctionStr1),
     erl_parse:parse_form(Tokens).
 
 to_json_arity2_func(Fields) ->
     Length = length(Fields) + 1,
-    FunctionStr = "to_json(Struct, Options) -> to_json(Struct, ~p, [], Options).",
+    FunctionStr =
+        "to_json(Struct, Options) when is_tuple(Struct) ->"
+        "    to_json(Struct, ~p, [], Options);"
+        "to_json(Options, Struct) ->"
+        "    to_json(Struct, Options).",
     FunctionStr1 = lists:flatten(io_lib:format(FunctionStr, [Length])),
     parse_string(FunctionStr1).
 
