@@ -287,6 +287,15 @@ to_json_func(Fields) ->
         "           to_json(Struct, Elem - 1, Acc, Options);"
         "       {undefined, null} ->"
         "           to_json(Struct, Elem - 1, [{~s, null} | Acc], Options);"
+        "       {Tuple, _} when is_tuple(Tuple) ->"
+        "           SubRecName = element(1, Tuple),"
+        "           case erlang:function_exported(SubRecName, to_json, 2) of"
+        "               false ->"
+        "                   erlang:error(badarg);"
+        "               true ->"
+        "                   SubJson = SubRecName:to_json(Tuple, Options),"
+        "                   to_json(Struct, Elem - 1, [{~s, SubJson} | Acc], Options)"
+        "           end;"
         "       _Else ->"
         "           to_json(Struct, Elem - 1, [{~s, Value} | Acc], Options)"
         "   end",
@@ -300,7 +309,7 @@ to_json_func([], _LooperStr, _Elem, Acc) ->
     lists:reverse(Acc);
 
 to_json_func([{K, _Default, _Types} | Tail], Str, Elem, Acc) ->
-    Str1 = lists:flatten(io_lib:format(Str, [Elem, K, K])),
+    Str1 = lists:flatten(io_lib:format(Str, [Elem, K, K, K])),
     to_json_func(Tail, Str, Elem + 1, [Str1 | Acc]).
 
 to_json_transform_func() ->
