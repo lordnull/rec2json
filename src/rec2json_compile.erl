@@ -272,8 +272,8 @@ to_json_arity2_func(Fields) ->
 
 to_json_func(Fields) ->
     Ending =
-        "to_json(_Struct, 1, Acc, Options) ->"
-        "   to_json_transform(Acc, Options)",
+        "to_json(Struct, 1, Acc, Options) ->"
+        "   to_json_transform(Acc, Struct, Options)",
     OptionTrap =
         "to_json(Struct, Elem, Acc, Options) when is_list(Options) ->"
         "   OptRec = build_to_opts(Options),"
@@ -305,21 +305,26 @@ to_json_func([{K, _Default, _Types} | Tail], Str, Elem, Acc) ->
 
 to_json_transform_func() ->
     Func =
-        "to_json_transform(Json, #to_json_opt{transforms = Trans}) ->"
-        "   to_json_transform(Json, Trans);"
-        "to_json_transform([], []) ->"
+        "to_json_transform(Json, Struct, #to_json_opt{transforms = Trans}) ->"
+        "   to_json_transform(Json, Struct, Trans);"
+        "to_json_transform([], _Struct, []) ->"
         "   [{}];"
-        "to_json_transform(Json, []) ->"
+        "to_json_transform(Json, _Struct, []) ->"
         "   Json;"
-        "to_json_transform(Json, [Func | Tail]) when is_function(Func) ->"
-        "   Json2 = Func(Json),"
-        "   to_json_transform(Json2, Tail);"
-        "to_json_transform(Json, [Atom | Tail]) when is_atom(Atom) ->"
+        "to_json_transform(Json, Struct, [Func | Tail]) when is_function(Func) ->"
+        "   Json2 = case erlang:fun_info(Func, arity) of"
+        "       {arity, 1} ->"
+        "           Func(Json);"
+        "       {arity, 2} ->"
+        "           Func(Json, Struct)"
+        "   end,"
+        "   to_json_transform(Json2, Struct, Tail);"
+        "to_json_transform(Json, Struct, [Atom | Tail]) when is_atom(Atom) ->"
         "   Json2 = proplists:delete(Atom, Json),"
-        "   to_json_transform(Json2, Tail);"
-        "to_json_transform(Json, [{_Key, _Value} = Prop| Tail]) ->"
+        "   to_json_transform(Json2, Struct, Tail);"
+        "to_json_transform(Json, Struct, [{_Key, _Value} = Prop| Tail]) ->"
         "   Json2 = Json ++ [Prop],"
-        "   to_json_transform(Json2, Tail).",
+        "   to_json_transform(Json2, Struct, Tail).",
     parse_string(Func).
 
 blank_record(RecName, Fields) ->
