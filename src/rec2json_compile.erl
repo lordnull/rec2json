@@ -499,6 +499,13 @@ from_json_type_clauses(Key, {Any, [{binary, []} | Tail]}, ElemNum, Acc) ->
     Str2 = lists:flatten(io_lib:format(Str, [Key, ElemNum])),
     from_json_type_clauses(Key, {Any, Tail}, ElemNum, [Str2 | Acc]);
 
+from_json_type_clauses(Key, {Any, [{list, ListTypes} | Tail]}, ElemNum, Acc) ->
+    Str =
+        "from_json([{~s, Val} | Tail], Struct, Opt, Warns) when is_list(Val) ->"
+        "    erlang:error({list, nyi})",
+    Str2 = lists:flatten(io_lib:format(Str, [Key])),
+    from_json_type_clauses(Key, {Any, Tail}, ElemNum, [Str2 | Acc]);
+
 from_json_type_clauses(_Key, {_Any, [TypeData | _]}, _ElemNum, _Acc) ->
     erlang:error({function_clause, TypeData}).
 
