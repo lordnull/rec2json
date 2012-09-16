@@ -137,8 +137,13 @@ extract_types([], Acc) ->
 extract_types([{type, _L1, union, Types} | Tail], Acc) ->
     Acc2 = extract_types(Types, Acc),
     extract_types(Tail, Acc2);
+extract_types([{type, _L1, list, ListTypes} | Tail], Acc) ->
+    ListTypes2 = extract_types(ListTypes),
+    Acc2 = [{list, ListTypes2} | Acc],
+    extract_types(Tail, Acc2);
 extract_types([{type, _L1, Type, TypeArgs} | Tail], Acc) ->
     % most likely not a good idea
+    ?log("type:  ~p;  type args:  ~p", [Type, TypeArgs]),
     Normalised = [erl_parse:normalise(TypeArg) || TypeArg <- TypeArgs],
     Acc2 = [{Type, Normalised} | Acc],
     extract_types(Tail, Acc2);
