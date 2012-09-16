@@ -87,19 +87,23 @@ The to_json function can take a list of mutators.  Mutators are applied in
 the order listed except {null_is_undefined}.  Supported mutators are:
 
 * Turn undefined into null instead of skipping the field
-    Record:to_json([{null_is_undefined}]).
-    person:to_json(Record, [{null_is_undefined}]).
+
+    <pre>Record:to_json([{null_is_undefined}]).
+    person:to_json(Record, [{null_is_undefined}]).</pre>
 
 * Add a property
-    Record:to_json([{single, true}]).
-    person:to_json(Record, [{single, true}]).
+
+    <pre>Record:to_json([{single, true}]).
+    person:to_json(Record, [{single, true}]).</pre>
 
 * Remove a property
-    Record:to_json([age]).
-    person:to_json(Record, [age]).
+
+    <pre>Record:to_json([age]).
+    person:to_json(Record, [age]).</pre>
 
 * Modify based only on the json
-    ModFunc = fun(Json) ->
+
+    <pre>ModFunc = fun(Json) ->
         case proplists:get_value(spouse, Json) of
             undefined ->
                 [{single, true} | Json];
@@ -108,10 +112,11 @@ the order listed except {null_is_undefined}.  Supported mutators are:
         end
     end.
     Record:to_json([ModFunc]).
-    person:to_json(Record, [ModFunc]).
+    person:to_json(Record, [ModFunc]).</pre>
 
 * Modify based on both json and record
-   	ModFunc = fun(Json, Record) ->
+
+    <pre>ModFunc = fun(Json, Record) ->
         case Record#person.spouse of
             undefined ->
                 [{single, true} | Json];
@@ -120,7 +125,7 @@ the order listed except {null_is_undefined}.  Supported mutators are:
         end
     end.
     Record:to_json([ModFunc]).
-    person:to_json(Record, [ModFunc]).
+    person:to_json(Record, [ModFunc]).</pre>
 
 ### from_json
 
