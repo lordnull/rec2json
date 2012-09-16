@@ -105,7 +105,7 @@ simplify_fields([{record_field, _Line, Name} | Tail], Acc) ->
 simplify_fields([{record_field, _L1, Name, Default} | Tail], Acc) ->
     ?log("Name with default:  ~p, ~p", [Name, Default]),
     Name2 = erl_parse:normalise(Name),
-    Default2 = erl_parse:normaise(Default),
+    Default2 = erl_parse:normalise(Default),
     simplify_fields(Tail, [{Name2, Default2, {any, []}} | Acc]);
 
 simplify_fields([{typed_record_field, {record_field, _L1, Name}, Type} | Tail], Acc) ->
