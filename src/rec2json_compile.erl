@@ -489,7 +489,18 @@ from_json_type_clauses(Key, {Any, [{integer, []} | Tail]}, ElemNum, Acc) ->
         "   Struct0 = setelement(~p, Struct, Val),"
         "   from_json(Tail, Struct0, Opt, Warns)",
     Str2 = lists:flatten(io_lib:format(Str, [Key, ElemNum])),
-    from_json_type_clauses(Key, {Any, Tail}, ElemNum, [Str2 | Acc]).
+    from_json_type_clauses(Key, {Any, Tail}, ElemNum, [Str2 | Acc]);
+
+from_json_type_clauses(Key, {Any, [{binary, []} | Tail]}, ElemNum, Acc) ->
+    Str =
+        "from_json([{~s, Val} | Tail], Struct, Opt, Warns) when is_binary(Val) ->"
+        "    Struct0 = setelement(~p, Struct, Val),"
+        "    from_json(Tail, Struct0, Opt, Warns)",
+    Str2 = lists:flatten(io_lib:format(Str, [Key, ElemNum])),
+    from_json_type_clauses(Key, {Any, Tail}, ElemNum, [Str2 | Acc]);
+
+from_json_type_clauses(_Key, {_Any, [TypeData | _]}, _ElemNum, _Acc) ->
+    erlang:error({function_clause, TypeData}).
 
 %from_json([], Struct) -> {ok, Struct};
 %from_json([{<<"boolean_thing">>, Value} | Tail], Struct) ->
