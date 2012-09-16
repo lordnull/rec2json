@@ -149,6 +149,7 @@ create_module(RecordName, Fields) ->
     {ok, ToJsonTransform} = to_json_transform_func(),
     {ok, FromJsonA1} = from_json_arity1_func(RecordName, Fields),
     {ok, FromJsonA2} = from_json_arity2_func(RecordName, Fields),
+    {ok, FromJsonA3} = from_json_arity3_func(RecordName, Fields),
     {ok, FromJson} = from_json_func(Fields),
     ScrubKeys = scrub_keys_func(Fields),
     BuildFromOptRecFuncs = build_from_opt_rec_func(),
@@ -383,12 +384,29 @@ from_json_arity1_func(RecName, Fields) ->
 from_json_arity2_func(RecName, Fields) ->
     BlankRec = blank_record(RecName, Fields),
     FromJsonA2Str =
-        "from_json(Json, Opts) ->"
+        "from_json(Json, Opts) when is_list(Json), is_list(Opts)->"
         "   Json2 = scrub_keys(Json),"
-        "   from_json(Json2, ~s, Opts, []).",
+        "   from_json(Json2, ~s, Opts, []);"
+        "from_json(Struct, Json) when is_tuple(Struct) ->"
+        "    Json2 = scrub_keys(Json),"
+        "    from_json(Json2, Struct, [], []);"
+        "from_json(Json, Struct) ->"
+        "   Json2 = scrub_keys(Json),"
+        "   from_json(Json2, Struct, [], []).",
     FromJsonA2Str1 = lists:flatten(io_lib:format(FromJsonA2Str, [BlankRec])),
     {ok, FromJsonA2Tokens, _Line} = erl_scan:string(FromJsonA2Str1),
     erl_parse:parse_form(FromJsonA2Tokens).
+
+from_json_arity3_func(RecName, Fields) ->
+    FromJsonA3Str =
+        "from_json(Struct, Json, Opts) when is_list(Opts) ->"
+        "    Json2 = scrub_keys(Json),"
+        "    from_json(Json2, Struct, Opts, []);"
+        "from_json(Json, Opts, Struct) ->"
+        "    Json2 = scrub_keys(Json),"
+        "    from_json(Json2, Struct, Opts, []).",
+    {ok, FromJsonA3Tokens, _Line} = erl_scan:string(FromJsonA3Str),
+    erl_parse:parse_form(FromJsonA3Tokens).
 
 from_json_func(Fields) ->
     OptionCatcher =
