@@ -435,15 +435,33 @@ from_json_func([], _N, Acc) ->
     erl_parse:parse_form(Tokens);
 
 from_json_func([{K, _Default, Types} | Tail], ElemNum, Acc) ->
-    Clauses = from_json_type_clauses(K, Types, ElemNum),
-    Acc2 = lists:append(Acc, Clauses),
-    from_json_func(Tail, ElemNum + 1, Acc2).
+    Clause = from_json_type_clause(K, Types, ElemNum),
+    %Acc2 = lists:append(Acc, Clauses),
+    ?log("And the clause is:  ~n~n~s~n~n", [Clause]),
+    from_json_func(Tail, ElemNum + 1, [Clause | Acc]).
+    %from_json_func(Tail, ElemNum + 1, Acc2).
 
-from_json_type_clauses(Key, any, ElemNum) ->
-    from_json_type_clauses(Key, {any, []}, ElemNum);
+from_json_type_clause(Key, any, ElemNum) ->
+    from_json_type_clause(Key, {any, []}, ElemNum);
 
-from_json_type_clauses(Key, Types, ElemNum) ->
-    from_json_type_clauses(Key, Types, ElemNum, []).
+from_json_type_clause(Key, {Any, Types}, ElemNum) ->
+    KeyClause = 
+    "from_json([{~s, Val} | Tail], Struct, #from_json_opt{treat_null = NullIs} = Opt, Warns) ->"
+    "   case rec2json:verify_type(Val, ~p, ~s, NullIs, Opt) of"
+    "       {ok, Val1} ->"
+    "           Struct0 = setelement(~p, Struct, Val1),"
+    "           from_json(Tail, Struct0, Opt, Warns);"
+    "       {warn, Val1} ->"
+    "           Struct0 = setelement(~p, Struct, Val1),"
+    "           from_json(Tail, Struct0, Opt, [~s | Warns]);"
+    "       {warn, Val1, SubWarns} ->"
+    "           Struct0 = setelement(~p, Struct, Val1),"
+    "           SubWarns1 = [[~s | SW] || SW <- SubWarns],"
+    "           from_json(Tail, Struct0, Opt, [SubWarns1 | Warns])"
+    "   end",
+    % TODO make types usable in the string format.
+    TypeStr = Types,
+    lists:flatten(io_lib:format(KeyClause, [Key, TypeStr, Any, ElemNum, ElemNum, Key, ElemNum, Key])).
 
 from_json_type_clauses(Key, {any, []}, ElemNum, Acc) ->
     NullIsNullStr =
@@ -530,6 +548,7 @@ from_json_type_clauses(Key, {Any, [{'record', [Rectype]} | Tail]}, ElemNum, Acc)
 
 from_json_type_clauses(_Key, {_Any, [TypeData | _]}, _ElemNum, _Acc) ->
     erlang:error({function_clause, TypeData}).
+
 
 %from_json([], Struct) -> {ok, Struct};
 %from_json([{<<"boolean_thing">>, Value} | Tail], Struct) ->
