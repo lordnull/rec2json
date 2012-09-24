@@ -29,6 +29,10 @@ parse(String) ->
 parse(String, Opts) ->
     {error, nyi}.
 
+verify_type(null, [], any, TreatNull, _RecurseOpt) ->
+    {ok, TreatNull};
+verify_type(null, [], _Any, TreatNull, _RecurseOpt) ->
+    {warn, TreatNull};
 verify_type(Val, [], any, _TreatNull, _RecurseOpt) ->
     {ok, Val};
 verify_type(Val, [], _Any, _TreatNull, _RecurseOpt) ->
