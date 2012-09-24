@@ -179,7 +179,7 @@ feature_test_() ->
         {"from json with type mismatch: null", fun() ->
             Expected = #feature{null_type = <<"hi">>},
             Json = [{null_type, <<"hi">>}],
-            ?assertEqual({ok, Expected, [<<"hi">>]}, feature:from_json(Json))
+            ?assertEqual({ok, Expected, [null_type]}, feature:from_json(Json))
         end},
 
         {"from json with type mismatch:  record_type", fun() ->
