@@ -436,10 +436,7 @@ from_json_func([], _N, Acc) ->
 
 from_json_func([{K, _Default, Types} | Tail], ElemNum, Acc) ->
     Clause = from_json_type_clause(K, Types, ElemNum),
-    %Acc2 = lists:append(Acc, Clauses),
-    ?log("And the clause is:  ~n~n~s~n~n", [Clause]),
     from_json_func(Tail, ElemNum + 1, [Clause | Acc]).
-    %from_json_func(Tail, ElemNum + 1, Acc2).
 
 from_json_type_clause(Key, any, ElemNum) ->
     from_json_type_clause(Key, {any, []}, ElemNum);
