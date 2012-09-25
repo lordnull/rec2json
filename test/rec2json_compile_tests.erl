@@ -269,3 +269,18 @@ prop_non_neg_integer() ->
                 {ok, Expected} == Got
         end
     end).
+
+prop_boolean() ->
+    rec2json_compile:scan_string("-record(prop_boolean, {f :: boolean()}).", []),
+    ?FORALL(Bool, oneof([bool(), goober]),
+    begin
+        Expected = {prop_boolean, Bool},
+        Json = [{f, Bool}],
+        Got = prop_boolean:from_json(Json),
+        if
+            Bool == goober ->
+                {ok, Expected,[f]} == Got;
+            true ->
+                {ok, Expected} == Got
+        end
+    end).
