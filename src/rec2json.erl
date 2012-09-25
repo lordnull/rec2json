@@ -250,7 +250,7 @@ verify_type(Val, [Atom | Tail], Any, TreatNull, Opt) when is_binary(Val), is_ato
             verify_type(Val, Tail, Any, TreatNull, Opt)
     end;
 verify_type(Val, [Type | Tail], Any, TreatNull, Opt) ->
-    ?log("unrecognized type ~p, evaling val ~p", [Type, Val]),
+    %?log("unrecognized type ~p, evaling val ~p", [Type, Val]),
     verify_type(Val, Tail, Any, TreatNull, Opt).
 
 verify_type_record(Json, RecName, Opt) ->
@@ -284,7 +284,7 @@ verify_types([], _Types, _Any, _TreatNull, _Opt, _Index, WarnIndexes, Acc) ->
             {warn, Acc1, Indexes}
     end;
 verify_types([Val | Tail], Types, Any, TreatNull, Opt, Index, WarnInd, Acc) ->
-    ?log("verifying val ~p against types ~p", [Val, Types]),
+    %?log("verifying val ~p against types ~p", [Val, Types]),
     case verify_type(Val, Types, Any, TreatNull, Opt) of
         {ok, Val1} ->
             verify_types(Tail, Types, Any, TreatNull, Opt, Index + 1, WarnInd, [Val1 | Acc]);
