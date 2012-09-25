@@ -7,34 +7,31 @@ record definitions, and generates a module for each record to convert that
 record to and from the
 [proposed erlang json standard](http://www.erlang.org/eeps/eep-0018.html)
 
-**This should be considered alpha software.  Many of the features listed
-are not done**
-
 ## Features
 
 Features that are not full implemented are marked with (WIP).
 
 * Resulting modules can be used as parameterized modules or pure erlang.
-* (WIP) Type checking on json -> record conversion.
+* Limited type checking on json -> record conversion.
 * Atom 'undefined' fields in records optionally skipped or set to null.
 * Atom 'null' in json optionally converted to 'undefined'.
 * Post processing options on record -> json convertion.
 * Seed json -> record conversion with a record.
-* (WIP) Nested json -> record and record -> json conversions for other
+* Nested json -> record and record -> json conversions for other
 records that have been compiled using rec2json.
-* Resulting modules have no dependency on rec2json.
+* <span style="font-decorlation:strike-through">Resulting modules have no dependency on rec2json.</span>
 
 ## Compiling
 
-    ./rebar get-deps compile
+    make
 
 To run tests:
 
-    ./rebar eunit ct skip_deps=true
+    make eunit
 
 ## Compiling Records
 
-Full implemented is the scan_file and scan_string functions.  The scan file
+Full implemented is the scan_file and scan_string functions. The scan file
 processes the given file, while scan_string can only process a single record
 definition given as a string.
 
@@ -61,103 +58,187 @@ This will create a "rec2json" script that can be run:
 
 ## Use
 
-The records are unchanged and can be used normally.  The module to convert
-the record to and from json has the same name as the record.  A record can
-also be used as a paramterized module, making is simple to use with the
+The records are unchanged and can be used normally. The module to convert
+the record to and from json has the same name as the record. A record can
+also be used as a paramterized module, making it simple to use with the
 [erlydtl Django templates](https://github.com/evanmiller/erlydtl) project.
 
 The given examples use the following record and record defintion:
 
-    -record(persion {
-        name :: binary(),
-        age = 0 :: pos_integer(),
-        spouse :: #person{}
-    }).
-    Record = #person{ name = <<"John">>, age = 32, spouse = undefined }.
+```erlang
+-record(persion {
+    name :: binary(),
+    age = 0 :: pos_integer(),
+    spouse :: #person{}
+}).
+Record = #person{ name = <<"John">>, age = 32, spouse = undefined }.
+```
 
 ### to_json
 
 To convert a record to a json structure:
 
-    Json = Record:to_json().
-    Json = person:to_json(Record).
-		[{name, <<"John">>}, {age, 32}].
+```erlang
+Json = Record:to_json().
+Json = person:to_json(Record).
+[{name, <<"John">>}, {age, 32}].
+```
 
-The to_json function can take a list of mutators.  Mutators are applied in
-the order listed except {null_is_undefined}.  Supported mutators are:
+The to_json function can take a list of mutators. Mutators are applied in
+the order listed except {null_is_undefined}. Supported mutators are:
 
 * Turn undefined into null instead of skipping the field
 
-    <pre>Record:to_json([{null_is_undefined}]).
-    person:to_json(Record, [{null_is_undefined}]).</pre>
+```erlang
+Record:to_json([{null_is_undefined}]).
+person:to_json(Record, [{null_is_undefined}]).
+```
 
 * Add a property
 
-    <pre>Record:to_json([{single, true}]).
-    person:to_json(Record, [{single, true}]).</pre>
+```erlang
+Record:to_json([{single, true}]).
+person:to_json(Record, [{single, true}]).
+```
 
 * Remove a property
 
-    <pre>Record:to_json([age]).
-    person:to_json(Record, [age]).</pre>
+```erlang
+Record:to_json([age]).
+person:to_json(Record, [age]).
+```
 
 * Modify based only on the json
 
-    <pre>ModFunc = fun(Json) ->
-        case proplists:get_value(spouse, Json) of
-            undefined ->
-                [{single, true} | Json];
-            _ ->
-                [{single, false} | Json]
-        end
-    end.
-    Record:to_json([ModFunc]).
-    person:to_json(Record, [ModFunc]).</pre>
+```erlang
+ModFunc = fun(Json) ->
+    case proplists:get_value(spouse, Json) of
+        undefined ->
+            [{single, true} | Json];
+        _ ->
+            [{single, false} | Json]
+    end
+end.
+Record:to_json([ModFunc]).
+person:to_json(Record, [ModFunc]).
+```
 
 * Modify based on both json and record
 
-    <pre>ModFunc = fun(Json, Record) ->
-        case Record#person.spouse of
-            undefined ->
-                [{single, true} | Json];
-            _ ->
-                [{single, false} | Json]
-        end
-    end.
-    Record:to_json([ModFunc]).
-    person:to_json(Record, [ModFunc]).</pre>
+```erlang
+ModFunc = fun(Json, Record) ->
+    case Record#person.spouse of
+        undefined ->
+            [{single, true} | Json];
+        _ ->
+            [{single, false} | Json]
+    end
+end.
+Record:to_json([ModFunc]).
+person:to_json(Record, [ModFunc]).
+```
 
 ### from_json
 
 Converting from a json structure to a record is just as simple:
 
-    {ok, Record} = person:from_json([
-        {<<"name">>, <<"John">>},
-        {<<"age">>, 32},
-        {<<"spouse">>, null}
-    ]).
+```erlang
+{ok, Record} = person:from_json([
+    {<<"name">>, <<"John">>},
+    {<<"age">>, 32},
+    {<<"spouse">>, null}
+]).
+```
 
 It may be desireable to change 'null' into 'undefined' in the record:
 
-    {ok, Record} = person:from_json(Json, [null_is_undefined]).
+```erlang
+{ok, Record} = person:from_json(Json, [null_is_undefined]).
+```
 
 It may be desireable to start with an existing record instead of creating
 a new one:
 
-    {ok, Record2} = Record:from_json(Json).
-    {ok, Record2} = person:from_json(Json, Record).
-    {ok, Record2} = person:from_json(Record, Json).
-    {ok, Record2} = Record:from_json(Json, [null_is_undefined]).
-    {ok, Record2} = person:from_json(Record, Json, [null_is_undefined]).
+```erlang
+{ok, Record2} = Record:from_json(Json).
+{ok, Record2} = person:from_json(Json, Record).
+{ok, Record2} = person:from_json(Record, Json).
+{ok, Record2} = Record:from_json(Json, [null_is_undefined]).
+{ok, Record2} = person:from_json(Record, Json, [null_is_undefined]).
+```
 
-If the json struction has a type that connot be reconciled with a type
+If the json structure has a type that connot be reconciled with a type
 specified by the record definition, a list of fields with possible errors
-is returned.  The record will have the data that was in the json structure.
-An untyped record field is the same as having the type 'any()'.  There are
+is returned. The record will have the data that was in the json structure.
+An untyped record field is the same as having the type 'any()'. There are
 no warings about missing properties in the json, they simply retain the
 default value of the record.
 
-    {ok, Record, [age]} = person:from_json([{<<"age">>, <<"32">>}]).
+```erlang
+{ok, Record, [age]} = person:from_json([{<<"age">>, <<"32">>}]).
+```
+
+## Type Checking and Converstion
+
+Type conversion attempts to be as transparent and intuitive as possible. There
+are some types that json does not represent directly, and some types that have
+additional checking implemented.
+
+Record fields that have atoms as types will have binary values in the json
+checked.  If the atom converted to the binary is equal to the json value, the
+atom value is put into the record.
+
+Lists have their types checked. If there is an invalid type, the invalid type
+is placed in the list, but the warning message has the index of the invalid type
+placed in the warning path list. For example:
+
+```erlang
+-record(list_holder, {
+    ids :: [integer()]
+}).
+
+type_mismatch() ->
+    Json = [{ids, [<<"invalid">>, 3]}],
+    {ok, Record, Warnings} = list_holder:from_json(Json),
+    #list_holder{ids = [<<"invalid">>, 3]} = Record,
+    [[ids, 1]] = Warnings.
+```
+
+Proplists will match the first record type. A warning is emitted if that
+record was not compiled using rec2json (eg: RecordName:from_json/2 is not
+an exported function). If the compilation emits warnings, the resulting warning
+list has the field name prepended to each.  For example:
+
+```erlang
+-record(outer, {
+    in_field :: #inner{}
+}).
+-record(inner, {
+    count :: integer()
+}).
+
+type_mismatch() ->
+    Json = [{in_field, [{count, <<"0">>}]}],
+    {ok, Record, Warnings} = outer:from_json(Json),
+    #outer{in_field = #inner{ count = <<"0">> } } = Record,
+    [[in_filed, count]] = Warnings.
+```
+
+If a record field is not typed, or has the type "any()", no warning is ever
+emitted for that field.
+
+User defined types are not checked.
+
+Currently defined types checked:
+
+* integer()
+* pos_integer()
+* float()
+* boolean()
+* [supported_type()]
+* #record{} when record has record:from_json/2 exported
+* atom (note it is not atom())
+* null when converting to undefined or back
 
 ## Contributing
 
