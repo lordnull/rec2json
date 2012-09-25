@@ -185,6 +185,8 @@ verify_type(false, [{boolean, []} | _Tail], _Any, _TreatNull, _Opt) ->
     {ok, false};
 verify_type(Val, [{binary, []} | _Tail], _Any, _TreatNull, _Opt) when is_binary(Val) ->
     {ok, Val};
+verify_type(Val, [{pos_integer, []} | _Tail], _Any, _TreatNull, _Opt) when is_integer(Val), Val > 0 ->
+    {ok, Val};
 verify_type([{}] = Json, [{record, [RecName]} | _Tail], _Any, _TreatNull, Opt) ->
     verify_type_record(Json, RecName, Opt);
 verify_type([{_K, _V} | _OTail] = Val, [{record, [RecName]} | _Tail], _Any, _TreatNull, Opt) ->
