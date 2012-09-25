@@ -49,7 +49,7 @@ Multple files can be scanned by either using wildcards or listing them:
 
 To generate a stand-alone script for compiling:
 
-    ./rebar escriptize skip_deps=true
+    make script
 
 This will create a "rec2json" script that can be run:
 
