@@ -1,6 +1,7 @@
 -module(rec2json_compile_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("triq/include/triq.hrl").
 -include("test/rec2json_compile_tests.hrl").
 
 -record(basic_rec, {
@@ -187,6 +188,79 @@ feature_test_() ->
             Expected = #feature{record_type = 33},
             Json = [{record_type, 33}],
             ?assertEqual({ok, Expected, [record_type]}, feature:from_json(Json))
+        end},
+
+        {"from json with type:  pos_integer", fun() ->
+            ?assert(triq:check(prop_pos_integer()))
+        end},
+
+        {"from json with type:  int_or_bool", fun() ->
+            ?assert(triq:check(prop_int_or_bool()))
+        end},
+
+        {"from json with type:  combo_type", fun() ->
+            ?assert(triq:check(prop_combo_type()))
+        end},
+
+        {"from json binary to atom conversion", fun() ->
+            ?assert(triq:check(prop_atoms()))
         end}
 
     ] end}.
+
+%% triq funcs.
+prop_pos_integer() ->
+    ?FORALL(Int, int(),
+    begin
+        Expected = #feature{over_zero = Int},
+        Json = [{over_zero, Int}],
+        Got = feature:from_json(Json),
+        if
+            Int > 0 ->
+                {ok, Expected} == Got;
+            true ->
+                {ok, Expected, [over_zero]} == Got
+        end
+    end).
+
+prop_int_or_bool() ->
+    ?FORALL(IntOrBool, oneof([int(), bool(), binary(), real()]),
+    begin
+        Expected = #feature{int_or_bool = IntOrBool},
+        Json = [{int_or_bool, IntOrBool}],
+        Got = feature:from_json(Json),
+        case IntOrBool of
+            X when is_integer(X); is_boolean(X) ->
+                {ok, Expected} == Got;
+            _ ->
+                {ok, Expected, [int_or_bool]} == Got
+        end
+    end).
+
+prop_combo_type() ->
+    ?FORALL(IntOrBool, oneof([int(), bool(), binary()]),
+    begin
+        Expected = #feature{combo_type = IntOrBool},
+        Json = [{combo_type, IntOrBool}],
+        Got = feature:from_json(Json),
+        if
+            is_binary(IntOrBool) ->
+                {ok, Expected, [combo_type]} == Got;
+            true ->
+                {ok, Expected} == Got
+        end
+    end).
+
+prop_atoms() ->
+    ?FORALL(Atom, oneof([init, ready, steady, go, stop, hop]),
+    begin
+        Expected = #feature{atoms = Atom},
+        Json = [{atoms, list_to_binary(atom_to_list(Atom))}],
+        Got = feature:from_json(Json),
+        case lists:member(Atom, [init, ready, steady]) of
+            true ->
+                {ok, Expected} == Got;
+            false ->
+                {ok, Expected, [atoms]} == Got
+        end
+    end).
