@@ -254,3 +254,18 @@ prop_atoms() ->
                 {ok, Expected, [f]} == Got
         end
     end).
+
+prop_non_neg_integer() ->
+    rec2json_compile:scan_string("-record(prop_non_neg_integer, {f :: non_neg_integer()}).", []),
+    ?FORALL(Int, int(),
+    begin
+        Json = [{f, Int}],
+        Got = prop_non_neg_integer:from_json(Json),
+        Expected = {prop_non_neg_integer, Int},
+        if
+            Int < 0 ->
+                {ok, Expected, [f]} == Got;
+            true ->
+                {ok, Expected} == Got
+        end
+    end).
