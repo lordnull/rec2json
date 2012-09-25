@@ -198,10 +198,6 @@ feature_test_() ->
             ?assert(triq:check(prop_int_or_bool()))
         end},
 
-        {"from json with type:  combo_type", fun() ->
-            ?assert(triq:check(prop_combo_type()))
-        end},
-
         {"from json binary to atom conversion", fun() ->
             ?assert(triq:check(prop_atoms()))
         end}
@@ -234,20 +230,6 @@ prop_int_or_bool() ->
                 {ok, Expected} == Got;
             _ ->
                 {ok, Expected, [int_or_bool]} == Got
-        end
-    end).
-
-prop_combo_type() ->
-    ?FORALL(IntOrBool, oneof([int(), bool(), binary()]),
-    begin
-        Expected = #feature{combo_type = IntOrBool},
-        Json = [{combo_type, IntOrBool}],
-        Got = feature:from_json(Json),
-        if
-            is_binary(IntOrBool) ->
-                {ok, Expected, [combo_type]} == Got;
-            true ->
-                {ok, Expected} == Got
         end
     end).
 
