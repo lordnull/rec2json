@@ -254,13 +254,14 @@ prop_combo_type() ->
 prop_atoms() ->
     ?FORALL(Atom, oneof([init, ready, steady, go, stop, hop]),
     begin
-        Expected = #feature{atoms = Atom},
         Json = [{atoms, list_to_binary(atom_to_list(Atom))}],
         Got = feature:from_json(Json),
         case lists:member(Atom, [init, ready, steady]) of
             true ->
+                Expected = #feature{atoms = Atom},
                 {ok, Expected} == Got;
             false ->
+                Expected = #feature{atoms = list_to_binary(atom_to_list(Atom))},
                 {ok, Expected, [atoms]} == Got
         end
     end).

@@ -173,17 +173,17 @@ verify_type(Val, [], _Any, _TreatNull, _RecurseOpt) ->
     {warn, Val};
 verify_type(null, [NullType | _Tail], _Any, NullType, _RecurseOpt) ->
     {ok, NullType};
-verify_type(Val, [{Type, []} | Tail], Any, Nulltype, RecurseOpt) ->
-    verify_type(Val, [Type | Tail], Any, Nulltype, RecurseOpt);
-verify_type(Val, [integer | _Tail], _Any, _TreatNull, _Opt) when is_integer(Val) ->
+%verify_type(Val, [{Type, []} | Tail], Any, Nulltype, RecurseOpt) ->
+%    verify_type(Val, [Type | Tail], Any, Nulltype, RecurseOpt);
+verify_type(Val, [{integer, []} | _Tail], _Any, _TreatNull, _Opt) when is_integer(Val) ->
     {ok, Val};
-verify_type(Val, [float | _Tail], _Any, _TreatNull, _Opt) when is_float(Val) ->
+verify_type(Val, [{float, []} | _Tail], _Any, _TreatNull, _Opt) when is_float(Val) ->
     {ok, Val};
-verify_type(true, [boolean | _Tail], _Any, _TreatNull, _Opt) ->
+verify_type(true, [{boolean, []} | _Tail], _Any, _TreatNull, _Opt) ->
     {ok, true};
-verify_type(false, [boolean | _Tail], _Any, _TreatNull, _Opt) ->
+verify_type(false, [{boolean, []} | _Tail], _Any, _TreatNull, _Opt) ->
     {ok, false};
-verify_type(Val, [binary | _Tail], _Any, _TreatNull, _Opt) when is_binary(Val) ->
+verify_type(Val, [{binary, []} | _Tail], _Any, _TreatNull, _Opt) when is_binary(Val) ->
     {ok, Val};
 verify_type([{}] = Json, [{record, [RecName]} | _Tail], _Any, _TreatNull, Opt) ->
     verify_type_record(Json, RecName, Opt);
@@ -191,6 +191,13 @@ verify_type([{_K, _V} | _OTail] = Val, [{record, [RecName]} | _Tail], _Any, _Tre
     verify_type_record(Val, RecName, Opt);
 verify_type(Vals, [{list, {ListAny, Types}} | _Tail], _Any, TreatNull, Opt) when is_list(Vals) ->
     verify_types(Vals, Types, ListAny, TreatNull, Opt);
+verify_type(Val, [Atom | Tail], Any, TreatNull, Opt) when is_binary(Val), is_atom(Atom) ->
+    case list_to_binary(atom_to_list(Atom)) of
+        Val ->
+            {ok, Atom};
+        _ ->
+            verify_type(Val, Tail, Any, TreatNull, Opt)
+    end;
 verify_type(Val, [Type | Tail], Any, TreatNull, Opt) ->
     ?log("unrecognized type ~p, evaling val ~p", [Type, Val]),
     verify_type(Val, Tail, Any, TreatNull, Opt).
