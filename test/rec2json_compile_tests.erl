@@ -284,3 +284,18 @@ prop_boolean() ->
                 {ok, Expected} == Got
         end
     end).
+
+prop_neg_integer() ->
+    rec2json_compile:scan_string("-record(prop_neg_integer, {f :: neg_integer()}).", []),
+    ?FORALL(Int, int(),
+    begin
+        Expected = {prop_neg_integer, Int},
+        Json = [{f, Int}],
+        Got = prop_neg_integer:from_json(Json),
+        if
+            Int < 0 ->
+                {ok, Expected} == Got;
+            true ->
+                {ok, Expected, [f]} == Got
+        end
+    end).

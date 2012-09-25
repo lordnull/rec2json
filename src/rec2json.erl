@@ -238,6 +238,8 @@ verify_type(Val, [{pos_integer, []} | _Tail], _Any, _TreatNull, _Opt) when is_in
     {ok, Val};
 verify_type(Val, [{non_neg_integer, []} | _Tail], _Any, _TreatNull, _Opt) when is_integer(Val), Val > -1 ->
     {ok, Val};
+verify_type(Val, [{neg_integer, []} | _Tail], _Any, _TreatNull, _Opt) when is_integer(Val), Val < 0 ->
+    {ok, Val};
 verify_type([{}] = Json, [{record, [RecName]} | _Tail], _Any, _TreatNull, Opt) ->
     verify_type_record(Json, RecName, Opt);
 verify_type([{_K, _V} | _OTail] = Val, [{record, [RecName]} | _Tail], _Any, _TreatNull, Opt) ->
