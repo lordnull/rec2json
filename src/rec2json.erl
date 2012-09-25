@@ -185,35 +185,57 @@ verify_type(false, [boolean | _Tail], _Any, _TreatNull, _Opt) ->
     {ok, false};
 verify_type(Val, [binary | _Tail], _Any, _TreatNull, _Opt) when is_binary(Val) ->
     {ok, Val};
-verify_type([{}], [{record, RecName} | _Tail], _Any, _TreatNull, Opt) ->
-    case erlang:function_exported(RecName, from_json, 2) of
-        true ->
-            case RecName:from_json([{}], Opt) of
-                {ok, Rec} ->
-                    {ok, Rec};
-                {ok, Rec, Warns} ->
-                    {warn, Rec, Warns}
-            end;
-        false ->
-            {warn, [{}]}
-    end;
-verify_type([{_K, _V} | _OTail] = Val, [{record, RecName} | _Tail], _Any, _TreatNull, Opt) ->
-    case erlang:function_exported(RecName, from_json, 2) of
-        true ->
-            case RecName:from_json(Val, Opt) of
-                {ok, Rec} ->
-                    {ok, Rec};
-                {ok, Rec, Warns} ->
-                    {warn, Rec, Warns}
-            end;
-        false ->
-            {warn, Val}
-    end;
+verify_type([{}] = Json, [{record, [RecName]} | _Tail], _Any, _TreatNull, Opt) ->
+    ?log("Type record thang:  ~p", [RecName]),
+    verify_type_record(Json, RecName, Opt);
+%    case erlang:function_exported(RecName, from_json, 2) of
+%        true ->
+%            case RecName:from_json([{}], Opt) of
+%                {ok, Rec} ->
+%                    {ok, Rec};
+%                {ok, Rec, Warns} ->
+%                    {warn, Rec, Warns}
+%            end;
+%        false ->
+%            {warn, [{}]}
+%    end;
+verify_type([{_K, _V} | _OTail] = Val, [{record, [RecName]} | _Tail], _Any, _TreatNull, Opt) ->
+    ?log("Type record thang:  ~p", [RecName]),
+    verify_type_record(Val, RecName, Opt);
+%    case erlang:function_exported(RecName, from_json, 2) of
+%        true ->
+%            case RecName:from_json(Val, Opt) of
+%                {ok, Rec} ->
+%                    {ok, Rec};
+%                {ok, Rec, Warns} ->
+%                    {warn, Rec, Warns}
+%            end;
+%        false ->
+%            {warn, Val}
+%    end;
 verify_type(Vals, [{list, Types} | _Tail], Any, TreatNull, Opt) ->
     verify_types(Vals, Types, Any, TreatNull, Opt);
 verify_type(Val, [Type | Tail], Any, TreatNull, Opt) ->
     ?log("unrecognized type ~p, evaling val ~p", [Type, Val]),
     verify_type(Val, Tail, Any, TreatNull, Opt).
+
+verify_type_record(Json, RecName, Opt) ->
+    case erlang:function_exported(RecName, from_json, 2) of
+        true ->
+            case RecName:from_json(Json, Opt) of
+                {ok, Rec} ->
+                    {ok, Rec};
+                {ok, Rec, Warns} ->
+                    {warn, Rec, Warns}
+            end;
+        false ->
+            case code:ensure_loaded(RecName) of
+                {error, _} ->
+                    {warn, Json};
+                {module, RecName} ->
+                    verify_type_record(Json, RecName, Opt)
+            end
+    end.
 
 verify_types(Vals, Types, Any, TreatNull, Opt) ->
     verify_types(Vals, Types, Any, TreatNull, Opt, 0, [], []).

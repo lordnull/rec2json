@@ -141,7 +141,7 @@ feature_test_() ->
         end},
 
         {"from json with included record", fun() ->
-            Expected = #feature{},
+            Expected = #feature{record_type = #included{}},
             Json = [{record_type, [{}]}],
             ?assertEqual({ok, Expected}, feature:from_json(Json))
         end},

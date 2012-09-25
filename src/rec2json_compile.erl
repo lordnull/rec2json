@@ -391,10 +391,12 @@ from_json_arity2_func(RecName, Fields) ->
         "from_json(Struct, Json) when is_tuple(Struct) ->"
         "    Json2 = scrub_keys(Json),"
         "    from_json(Json2, Struct, [], []);"
+        "from_json(Json, Opt) when is_record(Opt, from_json_opt) ->"
+        "   from_json(Json, ~s, Opt, []);"
         "from_json(Json, Struct) ->"
         "   Json2 = scrub_keys(Json),"
         "   from_json(Json2, Struct, [], []).",
-    FromJsonA2Str1 = lists:flatten(io_lib:format(FromJsonA2Str, [BlankRec])),
+    FromJsonA2Str1 = lists:flatten(io_lib:format(FromJsonA2Str, [BlankRec, BlankRec])),
     {ok, FromJsonA2Tokens, _Line} = erl_scan:string(FromJsonA2Str1),
     erl_parse:parse_form(FromJsonA2Tokens).
 
