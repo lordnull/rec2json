@@ -256,19 +256,20 @@ accessor_funcs([{K, _Default, _Type} | Tail], N, Acc) ->
 
 to_json_arity1_func(Fields) ->
     Length = length(Fields) + 1,
-    FunctionStr = "to_json(Struct) -> to_json(Struct, ~p, [], []).",
-    FunctionStr1 = lists:flatten(io_lib:format(FunctionStr, [Length])),
-    {ok, Tokens, _Line} = erl_scan:string(FunctionStr1),
+    FunctionStr = "to_json(Struct) -> to_json(Struct, []).",
+    {ok, Tokens, _Line} = erl_scan:string(FunctionStr),
     erl_parse:parse_form(Tokens).
 
 to_json_arity2_func(Fields) ->
     Length = length(Fields) + 1,
+    FieldNamesStr = [ atom_to_list(Fname) || {Fname, _, _} <- Fields ],
+    FieldNamesStr1 = string:join(FieldNamesStr, ","),
     FunctionStr =
         "to_json(Struct, Options) when is_tuple(Struct) ->"
-        "    to_json(Struct, ~p, [], Options);"
+        "    rec2json:to_json(Struct, [~s], Options);"
         "to_json(Options, Struct) ->"
         "    to_json(Struct, Options).",
-    FunctionStr1 = lists:flatten(io_lib:format(FunctionStr, [Length])),
+    FunctionStr1 = lists:flatten(io_lib:format(FunctionStr, [FieldNamesStr1])),
     parse_string(FunctionStr1).
 
 to_json_func(Fields) ->
