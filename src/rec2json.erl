@@ -189,8 +189,8 @@ verify_type([{}] = Json, [{record, [RecName]} | _Tail], _Any, _TreatNull, Opt) -
     verify_type_record(Json, RecName, Opt);
 verify_type([{_K, _V} | _OTail] = Val, [{record, [RecName]} | _Tail], _Any, _TreatNull, Opt) ->
     verify_type_record(Val, RecName, Opt);
-verify_type(Vals, [{list, Types} | _Tail], Any, TreatNull, Opt) when is_list(Vals) ->
-    verify_types(Vals, Types, Any, TreatNull, Opt);
+verify_type(Vals, [{list, {ListAny, Types}} | _Tail], _Any, TreatNull, Opt) when is_list(Vals) ->
+    verify_types(Vals, Types, ListAny, TreatNull, Opt);
 verify_type(Val, [Type | Tail], Any, TreatNull, Opt) ->
     ?log("unrecognized type ~p, evaling val ~p", [Type, Val]),
     verify_type(Val, Tail, Any, TreatNull, Opt).
@@ -214,7 +214,7 @@ verify_type_record(Json, RecName, Opt) ->
     end.
 
 verify_types(Vals, Types, Any, TreatNull, Opt) ->
-    verify_types(Vals, Types, Any, TreatNull, Opt, 0, [], []).
+    verify_types(Vals, Types, Any, TreatNull, Opt, 1, [], []).
 
 verify_types([], _Types, _Any, _TreatNull, _Opt, _Index, WarnIndexes, Acc) ->
     Acc1 = lists:reverse(Acc),
@@ -226,12 +226,16 @@ verify_types([], _Types, _Any, _TreatNull, _Opt, _Index, WarnIndexes, Acc) ->
             {warn, Acc1, Indexes}
     end;
 verify_types([Val | Tail], Types, Any, TreatNull, Opt, Index, WarnInd, Acc) ->
+    ?log("verifying val ~p against types ~p", [Val, Types]),
     case verify_type(Val, Types, Any, TreatNull, Opt) of
         {ok, Val1} ->
             verify_types(Tail, Types, Any, TreatNull, Opt, Index + 1, WarnInd, [Val1 | Acc]);
         {warn, Val1} ->
             verify_types(Tail, Types, Any, TreatNull, Opt, Index + 1, [Index | WarnInd], [Val1 | Acc]);
-        {warn, Val1, Paths} ->
+        {warn, Val1, Paths} when is_list(Paths) ->
             Paths1 = [[Index | Path] || Path <- Paths],
-            verify_types(Tail, Types, Any, TreatNull, Opt, Index + 1, [Paths1 | WarnInd], [Val1 | Acc])
+            verify_types(Tail, Types, Any, TreatNull, Opt, Index + 1, [Paths1 | WarnInd], [Val1 | Acc]);
+        {warn, Val1, Path} ->
+            Path1 = [Index, Path],
+            verify_types(Tail, Types, Any, TreatNull, Opt, Index + 1, [Path1 | WarnInd], [Val1 | Acc])
     end.

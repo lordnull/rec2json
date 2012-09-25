@@ -456,9 +456,14 @@ from_json_type_clause(Key, {Any, Types}, ElemNum) ->
     "           from_json(Tail, Struct0, Opt, [~s | Warns]);"
     "       {warn, Val1, SubWarns} ->"
     "           Struct0 = setelement(~p, Struct, Val1),"
-    "           SubWarns1 = [[~s | SW] || SW <- SubWarns],"
-    "           from_json(Tail, Struct0, Opt, [SubWarns1 | Warns])"
+    "           SubWarns1 = case is_list(hd(SubWarns)) of"
+    "               true ->"
+    "                   [[~s | SW] || SW <- SubWarns];"
+    "               false ->"
+    "                   [[~s, SW] || SW <- SubWarns]"
+    "           end,"
+    "           from_json(Tail, Struct0, Opt, SubWarns1 ++ Warns)"
     "   end",
     % TODO make types usable in the string format.
     TypeStr = Types,
-    lists:flatten(io_lib:format(KeyClause, [Key, TypeStr, Any, ElemNum, ElemNum, Key, ElemNum, Key])).
+    lists:flatten(io_lib:format(KeyClause, [Key, TypeStr, Any, ElemNum, ElemNum, Key, ElemNum, Key, Key])).
