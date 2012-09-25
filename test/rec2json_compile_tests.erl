@@ -167,10 +167,11 @@ feature_test_() ->
         {"from json with type mismatch: list", fun() ->
             Expected = #feature{list_type = null},
             Json = [{list_type, null}],
+            Got = feature:from_json(Json),
             ?assertEqual({ok, Expected, [list_type]}, feature:from_json(Json))
         end},
 
-        {"from json with type mistahc: list 2", fun() ->
+        {"from json with type mismatch: list 2", fun() ->
             Expected = #feature{list_type = [<<"hi">>]},
             Json = [{list_type, [<<"hi">>]}],
             ?assertEqual({ok, Expected, [list_type]}, feature:from_json(Json))
