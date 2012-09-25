@@ -13,7 +13,6 @@
 
 feature_test_() ->
     {setup, fun() ->
-        ?debugFmt("ka burble! ~p", [file:get_cwd()]),
         rec2json_compile:scan_file("../test/rec2json_compile_tests.hrl", [])
     end, fun(_) ->
         ok
@@ -188,62 +187,70 @@ feature_test_() ->
             Expected = #feature{record_type = 33},
             Json = [{record_type, 33}],
             ?assertEqual({ok, Expected, [record_type]}, feature:from_json(Json))
-        end},
-
-        {"from json with type:  pos_integer", fun() ->
-            ?assert(triq:check(prop_pos_integer()))
-        end},
-
-        {"from json with type:  int_or_bool", fun() ->
-            ?assert(triq:check(prop_int_or_bool()))
-        end},
-
-        {"from json binary to atom conversion", fun() ->
-            ?assert(triq:check(prop_atoms()))
         end}
 
     ] end}.
 
+triq_test() -> ?assert(check()).
+
+prop_integer() ->
+    rec2json_compile:scan_string("-record(prop_integer, {f :: integer()}).", []),
+    ?FORALL(Val, oneof([int(), real()]),
+    begin
+        Expected = {prop_integer, Val},
+        Json = [{f, Val}],
+        Got = prop_integer:from_json(Json),
+        if
+            is_integer(Val) ->
+                {ok, Expected} == Got;
+            true ->
+                {ok, Expected, [f]} == Got
+        end
+    end).
+
 %% triq funcs.
 prop_pos_integer() ->
+    rec2json_compile:scan_string("-record(prop_pos_integer, {f :: pos_integer()}).", []),
     ?FORALL(Int, int(),
     begin
-        Expected = #feature{over_zero = Int},
-        Json = [{over_zero, Int}],
-        Got = feature:from_json(Json),
+        Expected = {prop_pos_integer, Int},
+        Json = [{f, Int}],
+        Got = prop_pos_integer:from_json(Json),
         if
             Int > 0 ->
                 {ok, Expected} == Got;
             true ->
-                {ok, Expected, [over_zero]} == Got
+                {ok, Expected, [f]} == Got
         end
     end).
 
 prop_int_or_bool() ->
+    rec2json_compile:scan_string("-record(prop_int_or_bool, {f :: integer() | boolean()}).", []),
     ?FORALL(IntOrBool, oneof([int(), bool(), binary(), real()]),
     begin
-        Expected = #feature{int_or_bool = IntOrBool},
-        Json = [{int_or_bool, IntOrBool}],
-        Got = feature:from_json(Json),
+        Expected = {prop_int_or_bool, IntOrBool},
+        Json = [{f, IntOrBool}],
+        Got = prop_int_or_bool:from_json(Json),
         case IntOrBool of
             X when is_integer(X); is_boolean(X) ->
                 {ok, Expected} == Got;
             _ ->
-                {ok, Expected, [int_or_bool]} == Got
+                {ok, Expected, [f]} == Got
         end
     end).
 
 prop_atoms() ->
+    rec2json_compile:scan_string("-record(prop_atoms, {f :: 'init' | 'ready' | 'steady'}).", []),
     ?FORALL(Atom, oneof([init, ready, steady, go, stop, hop]),
     begin
-        Json = [{atoms, list_to_binary(atom_to_list(Atom))}],
-        Got = feature:from_json(Json),
+        Json = [{f, list_to_binary(atom_to_list(Atom))}],
+        Got = prop_atoms:from_json(Json),
         case lists:member(Atom, [init, ready, steady]) of
             true ->
-                Expected = #feature{atoms = Atom},
+                Expected = {prop_atoms, Atom},
                 {ok, Expected} == Got;
             false ->
-                Expected = #feature{atoms = list_to_binary(atom_to_list(Atom))},
-                {ok, Expected, [atoms]} == Got
+                Expected = {prop_atoms, list_to_binary(atom_to_list(Atom))},
+                {ok, Expected, [f]} == Got
         end
     end).
