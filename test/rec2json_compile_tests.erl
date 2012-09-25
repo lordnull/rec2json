@@ -299,3 +299,18 @@ prop_neg_integer() ->
                 {ok, Expected, [f]} == Got
         end
     end).
+
+prop_number() ->
+    rec2json_compile:scan_string("-record(prop_number, {f :: number()}).", []),
+    ?FORALL(Number, oneof([int(), real(), goober]),
+    begin
+        Expected = {prop_number, Number},
+        Json = [{f, Number}],
+        Got = prop_number:from_json(Json),
+        if
+            is_number(Number) ->
+                {ok, Expected} == Got;
+            true ->
+                {ok, Expected, [f]} == Got
+        end
+    end).
