@@ -19,7 +19,6 @@ Features that are not full implemented are marked with (WIP).
 * Seed json -> record conversion with a record.
 * Nested json -> record and record -> json conversions for other
 records that have been compiled using rec2json.
-* <span style="font-decorlation:strike-through">Resulting modules have no dependency on rec2json.</span>
 
 ## Compiling
 
