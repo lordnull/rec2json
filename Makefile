@@ -27,3 +27,6 @@ eunit: clean deps compile
 # Test each dependency individually in its own VM
 test: deps compile testclean
 	./rebar eunit skip_deps=true
+
+script: compile
+	./rebar escriptize skip_deps=true

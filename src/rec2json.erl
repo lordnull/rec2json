@@ -26,6 +26,55 @@
 -export([parse_file/1,parse_file/2]).
 -export([verify_type/5, verify_types/5]).
 -export([to_json/3, to_json/4]).
+-export([main/1]).
+
+%% ---------------------------------------------------------------------------
+%% escript file
+%% ---------------------------------------------------------------------------
+
+main(Args) ->
+    case parse_opts(Args) of
+        {error, _} -> help();
+        {ok, Sources, Include, Outdir} ->
+            compile_sources(Sources, Include, Outdir)
+    end.
+
+help() ->
+    Str =
+        "usage: rec2json -src=file_glob -dest=path/to/ebin -include=include\n"
+        "    -src can be specified more than once.\n",
+    io:format("~s", [Str]).
+
+parse_opts(Opts) ->
+    parse_opts(Opts, [], "include", ".").
+
+parse_opts([], Src, Inc, Out) ->
+    {ok, Src, Inc, Out};
+
+parse_opts(["-src=" ++ SrcGlob | Tail], Srcs, Inc, Out) ->
+    MoreSrcs = filelib:wildcard(SrcGlob),
+    parse_opts(Tail, Srcs ++ MoreSrcs, Inc, Out);
+
+parse_opts(["-dest=" ++ Dest | Tail], Srcs, Inc, _Out) ->
+    parse_opts(Tail, Srcs, Inc, Dest);
+
+parse_opts(["-include=" ++ Inc | Tail], Srcs, _Imp, Out) ->
+    parse_opts(Tail, Srcs, Inc, Out);
+
+parse_opts([What | _], _, _, _) ->
+    {error, {badotp, What}}.
+
+compile_sources([], _Inc, _Out) ->
+    ok;
+
+compile_sources([Src | Tail], Inc, Out) ->
+    io:format("compiling ~s\n", [Src]),
+    rec2json_compile:scan_file(Src, [{imports_dir, Inc}, {output_dir, Out}]),
+    compile_sources(Tail, Inc, Out).
+
+%% ---------------------------------------------------------------------------
+%% to be used maybe someday?
+%% ---------------------------------------------------------------------------
 
 parse_file(FileName) ->
     parse_file(FileName, []).
