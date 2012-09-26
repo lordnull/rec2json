@@ -191,7 +191,29 @@ feature_test_() ->
 
     ] end}.
 
-triq_test() -> ?assert(check()).
+triq_test_() ->
+    Exported = ?MODULE:module_info(exports),
+    Exported1 = lists:filter(fun
+        ({Atom, 0}) ->
+            case atom_to_list(Atom) of
+                "prop_" ++ _ -> true;
+                _ -> false
+            end;
+        (_) ->
+            false
+    end, Exported),
+    Exported2 = [F || {F, _} <- Exported1],
+    triq_test_gen(Exported2).
+
+triq_test_gen([]) ->
+    {generator, fun() -> [] end};
+triq_test_gen([TriqTest | Tail]) ->
+    {generator, fun() -> [
+        {atom_to_list(TriqTest), fun() ->
+            ?assert(triq:check(erlang:apply(?MODULE, TriqTest, []), 100))
+        end} |
+        triq_test_gen(Tail) ]
+    end}.
 
 %% triq funcs.
 prop_integer() ->
@@ -344,3 +366,34 @@ prop_float() ->
                 {ok, Expected, [f]} == Got
         end
     end).
+
+prop_list_one() ->
+    rec2json_compile:scan_string("-record(prop_list_one, {f :: [integer()]}).", []),
+    ?FORALL(List, list(oneof([int(), real()])),
+    begin
+        Expected = {prop_list_one, List},
+        Json = [{f, List}],
+        Got = prop_list_one:from_json(Json),
+        WarnsFun = fun
+            (Item, _Ind, Acc) when is_integer(Item) ->
+                Acc;
+            (_Item, Ind, Acc) ->
+                [[f, Ind] | Acc]
+        end,
+        case fold_ind(WarnsFun, [], List) of
+            [] ->
+                {ok, Expected} == Got;
+            Warns ->
+                Warns1 = lists:reverse(Warns),
+                {ok, Expected, Warns1} == Got
+        end
+    end).
+
+fold_ind(Fun, Acc, List) ->
+    fold_ind(Fun, Acc, 1, List).
+
+fold_ind(_Fun, Acc, _Ind, []) ->
+    Acc;
+fold_ind(Fun, Acc, Ind, [Item | Tail]) ->
+    Acc2 = Fun(Item, Ind, Acc),
+    fold_ind(Fun, Acc2, Ind + 1, Tail).
