@@ -389,6 +389,30 @@ prop_list_one() ->
         end
     end).
 
+prop_record_one() ->
+    rec2json_compile:scan_string("-record(prop_record_one_outer, {f :: #prop_record_one_inner{}}).", []),
+    rec2json_compile:scan_string("-record(prop_record_one_inner, {f :: integer()}).", []),
+    ?FORALL(SubRec, oneof([int(), [{}], [{f, oneof([int(), real()])}]]),
+    begin
+        {Json, Expected, Warns} = case SubRec of
+            N when is_integer(N) ->
+                {[{f, N}], {prop_record_one_outer, N}, [f]};
+            [{f, N}] = Obj when is_integer(N) ->
+                {[{f, Obj}], {prop_record_one_outer, {prop_record_one_inner, N}}, false};
+            [{}] ->
+                {[{f, [{}]}], {prop_record_one_outer, {prop_record_one_inner, undefined}}, false};
+            [{f, N}] = Obj ->
+                {[{f, Obj}], {prop_record_one_outer, {prop_record_one_inner, N}}, [[f, f]]}
+        end,
+        Got = prop_record_one_outer:from_json(Json),
+        case Warns of
+            false ->
+                {ok, Expected} == Got;
+            _ ->
+                {ok, Expected, Warns} == Got
+        end
+    end).
+
 fold_ind(Fun, Acc, List) ->
     fold_ind(Fun, Acc, 1, List).
 
