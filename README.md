@@ -232,8 +232,12 @@ Currently defined types checked:
 
 * integer()
 * pos_integer()
+* non_neg_integer()
+* neg_integer()
 * float()
+* number()
 * boolean()
+* binary()
 * [supported_type()]
 * #record{} when record has record:from_json/2 exported
 * atom (note it is not atom())
