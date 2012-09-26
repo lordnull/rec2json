@@ -193,6 +193,7 @@ feature_test_() ->
 
 triq_test() -> ?assert(check()).
 
+%% triq funcs.
 prop_integer() ->
     rec2json_compile:scan_string("-record(prop_integer, {f :: integer()}).", []),
     ?FORALL(Val, oneof([int(), real()]),
@@ -208,7 +209,6 @@ prop_integer() ->
         end
     end).
 
-%% triq funcs.
 prop_pos_integer() ->
     rec2json_compile:scan_string("-record(prop_pos_integer, {f :: pos_integer()}).", []),
     ?FORALL(Int, int(),
@@ -309,6 +309,36 @@ prop_number() ->
         Got = prop_number:from_json(Json),
         if
             is_number(Number) ->
+                {ok, Expected} == Got;
+            true ->
+                {ok, Expected, [f]} == Got
+        end
+    end).
+
+prop_binary() ->
+    rec2json_compile:scan_string("-record(prop_binary, {f :: binary()}).", []),
+    ?FORALL(Binary, oneof([list(int()), binary()]),
+    begin
+        Expected = {prop_binary, Binary},
+        Json = [{f, Binary}],
+        Got = prop_binary:from_json(Json),
+        if
+            is_binary(Binary) ->
+                {ok, Expected} == Got;
+            true ->
+                {ok, Expected, [f]} == Got
+        end
+    end).
+
+prop_float() ->
+    rec2json_compile:scan_string("-record(prop_float, {f :: float()}).", []),
+    ?FORALL(Float, oneof([int(), real()]),
+    begin
+        Expected = {prop_float, Float},
+        Json = [{f, Float}],
+        Got = prop_float:from_json(Json),
+        if
+            is_float(Float) ->
                 {ok, Expected} == Got;
             true ->
                 {ok, Expected, [f]} == Got
