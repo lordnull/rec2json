@@ -177,6 +177,13 @@ default value of the record.
 {ok, Record, [age]} = person:from_json([{<<"age">>, <<"32">>}]).
 ```
 
+### Including in a project
+
+The easiest way to use rec2json in your project is to add rec2json to your
+erlang libs path, and add the created rec2json script to your path.  Add
+rec2json as a required application.  Finally, during your build (in your
+Makefile or rebar.config precompile hook) call rec2json.
+
 ## Type Checking and Converstion
 
 Type conversion attempts to be as transparent and intuitive as possible. There
