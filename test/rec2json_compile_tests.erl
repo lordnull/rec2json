@@ -97,6 +97,12 @@ feature_test_() ->
             ?assertEqual([{record_type, [{field, <<"field">>}]}], Record:to_json())
         end},
 
+        {"To json, atom becomes binary", fun() ->
+          ?debugFmt("~p", [proplists:get_value(rec2json_compile, code:all_loaded())]),
+          Record = #included{field = 'an atom'},
+          ?assertEqual([{field, <<"an atom">>}], Record:to_json())
+        end},
+
         {"from json with binary fields", fun() ->
             Expected = #included{field = <<"field">>},
             ?assertEqual({ok, Expected}, included:from_json([{<<"field">>, <<"field">>}]))

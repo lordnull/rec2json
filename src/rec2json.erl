@@ -135,7 +135,11 @@ to_json_value(undefined, skip, _Transforms) ->
     skip;
 to_json_value(undefined, null, _Transforms) ->
     {ok, null};
-to_json_value(Val, _TreatUndef, _Transforms) when is_atom(Val); is_binary(Val); is_integer(Val); is_float(Val) ->
+to_json_value(Val, _TreatUndef, _Transform) when Val; not Val; Val == null ->
+    {ok, Val};
+to_json_value(Val, _TreatUndef, _Transforms) when is_atom(Val) ->
+    {ok, list_to_binary(atom_to_list(Val))};
+to_json_value(Val, _TreatUndef, _Transforms) when is_binary(Val); is_integer(Val); is_float(Val) ->
     {ok, Val};
 to_json_value(Tuple, TreatUndef, Transforms) when is_tuple(Tuple), is_atom(element(1, Tuple)) ->
     RecName = element(1, Tuple),
