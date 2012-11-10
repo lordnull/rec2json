@@ -192,7 +192,8 @@ additional checking implemented.
 
 Record fields that have atoms as types will have binary values in the json
 checked.  If the atom converted to the binary is equal to the json value, the
-atom value is put into the record.
+atom value is put into the record. When converting a record to json, atom
+values will be converted to binaries to conform to the erlang spec.
 
 Lists have their types checked. If there is an invalid type, the invalid type
 is placed in the list, but the warning message has the index of the invalid type
