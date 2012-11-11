@@ -108,6 +108,11 @@ feature_test_() ->
           ?assertEqual([{field, []}], Record:to_json())
         end},
 
+        {"To json, empty object stay objects", fun() ->
+          Record = #included{field = [{}]},
+          ?assertEqual([{field, [{}]}], Record:to_json())
+        end},
+
         {"from json with binary fields", fun() ->
             Expected = #included{field = <<"field">>},
             ?assertEqual({ok, Expected}, included:from_json([{<<"field">>, <<"field">>}]))

@@ -154,8 +154,10 @@ to_json_value(Tuple, TreatUndef, Transforms) when is_tuple(Tuple), is_atom(eleme
             Json = RecName:to_json(Tuple, Trans),
             {ok, Json}
     end;
-to_json_value([], TreatUndef, Transforms) ->
+to_json_value([], _TreatUndef, _Transforms) ->
     {ok, []};
+to_json_value([{}], _TreatUndef, _Transforms) ->
+    {ok, [{}]};
 to_json_value(List, TreatUndef, Transforms) when is_list(List) ->
     PropTest = fun
         ({K,V}) when is_atom(K) orelse is_binary(K) -> true;
