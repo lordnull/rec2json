@@ -103,10 +103,10 @@ feature_test_() ->
           ?assertEqual([{field, <<"an atom">>}], Record:to_json())
         end},
 
-				{"To json, empty lists stay lists", fun() ->
-					Record = #included{field = []},
-					?assertEqual([{field, []}], Record:to_json())
-				end},
+        {"To json, empty lists stay lists", fun() ->
+          Record = #included{field = []},
+          ?assertEqual([{field, []}], Record:to_json())
+        end},
 
         {"from json with binary fields", fun() ->
             Expected = #included{field = <<"field">>},
