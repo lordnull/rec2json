@@ -65,7 +65,7 @@ also be used as a paramterized module, making it simple to use with the
 The given examples use the following record and record defintion:
 
 ```erlang
--record(persion {
+-record(person {
     name :: binary(),
     age = 0 :: pos_integer(),
     spouse :: #person{}
