@@ -156,6 +156,36 @@ feature_test_() ->
             ?assertEqual({ok, Expected}, included:from_json(Json, [null_is_undefined]))
         end},
 
+        {"from json with options and seed record", [
+            {"parameterized module null is null", fun() ->
+                Expected = #included{field = null},
+                Json = [{field, null}],
+                Seed = #included{field = 32},
+                ?assertEqual({ok, Expected}, Seed:from_json(Json, []))
+            end},
+
+            {"parameterized module null is undefined", fun() ->
+                Expected = #included{field = undefined},
+                Json = [{field, null}],
+                Seed = #included{field = 32},
+                ?assertEqual({ok, Expected}, Seed:from_json(Json, [null_is_undefined]))
+            end},
+
+            {"pure module null is null", fun() ->
+                Expected = #included{field = null},
+                Json = [{field, null}],
+                Seed = #included{field = 32},
+                ?assertEqual({ok, Expected}, included:from_json(Json, [], Seed))
+            end},
+
+            {"pure module null is undefined", fun() ->
+                Expected = #included{field = undefined},
+                Json = [{field, null}],
+                Seed = #included{field = 32},
+                ?assertEqual({ok, Expected}, included:from_json(Json, [null_is_undefined], Seed))
+            end}
+        ]},
+
         {"from json with included record", fun() ->
             Expected = #feature{record_type = #included{}},
             Json = [{record_type, [{}]}],

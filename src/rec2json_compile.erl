@@ -157,7 +157,7 @@ create_module(RecordName, Fields) ->
     %{ok, FromJson} = from_json_func(RecordName, Fields),
     [ModuleDeclaration, ExportDeclaration, FromOptRecDeclaration,
         ToOptRecDeclaration] ++ AccessorFuncs ++ [ToJsonA1, ToJsonA2, ToJson,
-        ToJsonTransform, FromJsonA1, FromJsonA2, FromJson] ++ ScrubKeys ++
+        ToJsonTransform, FromJsonA1, FromJsonA2, FromJsonA3, FromJson] ++ ScrubKeys ++
         BuildFromOptRecFuncs ++ BuildToOptRecFuncs.
 
 from_opt_rec_declaration() ->
@@ -228,7 +228,8 @@ module_declaration(Name) ->
 
 export_declaration(Fields) ->
     FieldDecs = export_declarations(Fields, []),
-    Decs = ["to_json/1", "to_json/2", "from_json/1", "from_json/2" | FieldDecs],
+    Decs = ["to_json/1", "to_json/2", "from_json/1", "from_json/2",
+        "from_json/3" | FieldDecs],
     Decs1 = string:join(Decs, ","),
     String = lists:flatten(io_lib:format("-export([~s]).", [Decs1])),
     {ok, Tokens, _Line} = erl_scan:string(String),
