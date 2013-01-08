@@ -45,10 +45,35 @@ read_epp_forms(Handle, Acc) ->
 
 scan_string(Str, Opts) ->
     %Imports = proplists:get_value(imports_dir, Opts, []),
-    {ok, Tokens, _Line} = erl_scan:string(Str),
-    {ok, Form} = erl_parse:parse_form(Tokens),
-    Modules = analyze_forms([Form]),
+    {ok, Tokens, _Lines} = erl_scan:string(Str),
+    LineTokens = split_tokens_by_dots(Tokens),
+    Forms = parse_forms(LineTokens),
+    Modules = analyze_forms(Forms),
     output(Modules, proplists:get_value(output_dir, Opts, ".")).
+
+split_tokens_by_dots(Tokens) ->
+    split_tokens_by_dots(Tokens, []).
+
+split_tokens_by_dots([], Acc) ->
+    lists:reverse(Acc);
+
+split_tokens_by_dots(Tokens, Acc) ->
+    {SansDot, [Dot | Rest]} = lists:splitwith(fun is_not_dot/1, Tokens),
+    HasDot = SansDot ++ [Dot],
+    split_tokens_by_dots(Rest, [HasDot | Acc]).
+
+is_not_dot({dot, _}) -> false;
+is_not_dot(_) -> true.
+
+parse_forms(TokenList) ->
+    parse_forms(TokenList, []).
+
+parse_forms([], Acc) ->
+    lists:reverse(Acc);
+
+parse_forms([Tokens | Tail], Acc) ->
+    {ok, Form} = erl_parse:parse_form(Tokens),
+    parse_forms(Tail, [Form | Acc]).
 
 output([], _OutputDir) ->
     ok;

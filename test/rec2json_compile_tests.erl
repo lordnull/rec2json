@@ -11,6 +11,33 @@
     maybe_count
 }).
 
+compile_strings_test_() -> [
+    {"simple record compile", fun() ->
+        rec2json_compile:scan_string("-record(cst1, {}).", []),
+        code:load_file(cst1),
+        ?assert(erlang:function_exported(cst1, to_json, 1))
+    end},
+
+    {"record with a type compile", fun() ->
+        rec2json_compile:scan_string("-record(cst2, {f :: pos_integer()}).", []),
+        code:load_file(cst2),
+        ?assert(erlang:function_exported(cst2, to_json, 1))
+    end},
+
+    {"two records", fun() ->
+        rec2json_compile:scan_string("-record(cst3_1, {f}).\n-record(cst3_2, {baz :: integer()}).", []),
+        code:load_file(cst3_1),
+        code:load_file(cst3_2),
+        ?assert(erlang:function_exported(cst3_1, to_json, 1)),
+        ?assert(erlang:function_exported(cst3_2, to_json, 1))
+    end},
+
+    {"a type and a record", fun() ->
+        rec2json_compile:scan_string("-type foobar() :: {pos_integer(), integer()}.\n-record(cst4, {foobar :: [foobar()]}).", []),
+        code:load_file(cst4),
+        ?assert(erlang:function_exported(cst4, to_json, 1))
+    end}
+    ].
 feature_test_() ->
     {setup, fun() ->
         rec2json_compile:scan_file("../test/rec2json_compile_tests.hrl", [])
