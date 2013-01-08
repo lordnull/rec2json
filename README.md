@@ -9,8 +9,6 @@ record to and from the
 
 ## Features
 
-Features that are not full implemented are marked with (WIP).
-
 * Resulting modules can be used as parameterized modules or pure erlang.
 * Limited type checking on json -> record conversion.
 * Atom 'undefined' fields in records optionally skipped or set to null.
@@ -28,14 +26,15 @@ To run tests:
 
     make eunit
 
+    make test
+
 ## Compiling Records
 
-Full implemented is the scan_file and scan_string functions. The scan file
-processes the given file, while scan_string can only process a single record
-definition given as a string.
+Fully implemented is the scan_file and scan_string functions.
 
     rec2json_compile:scan_file("src_file.hrl", []).
     rec2json_compile:scan_string("-record(a, {b = 1 :: integer()}).", []).
+    rec2json_compile:scan_string("-record(a, {b :: #b{}}). \n -record(b, {c = 1 :: integer()}).").
 
 The Options (empty list at the end) are:
 
@@ -80,7 +79,7 @@ To convert a record to a json structure:
 ```erlang
 Json = Record:to_json().
 Json = person:to_json(Record).
-[{name, <<"John">>}, {age, 32}].
+[{name, <<"John">>}, {age, 32}] = Json.
 ```
 
 The to_json function can take a list of mutators. Mutators are applied in
@@ -181,7 +180,7 @@ default value of the record.
 
 The easiest way to use rec2json in your project is to add rec2json to your
 erlang libs path, and add the created rec2json script to your path.  Add
-rec2json as a required application.  Finally, during your build (in your
+rec2json as a required application. Finally, during your build (in your
 Makefile or rebar.config precompile hook) call rec2json.
 
 ## Type Checking and Converstion
@@ -234,7 +233,9 @@ type_mismatch() ->
 If a record field is not typed, or has the type "any()", no warning is ever
 emitted for that field.
 
-User defined types are not checked.
+User defined types are not checked. During record compile, any unrecognized
+types are skipped. The result is any record field with only user defined types
+is treated as having the type 'any()' when converting from json.
 
 Currently defined types checked:
 
