@@ -138,6 +138,12 @@ extract_types(T) when is_tuple(T) ->
 extract_types(T) when is_list(T) ->
     extract_types(T, []).
 
+extract_types([], [undefined]) ->
+    {any, []};
+
+extract_types([], []) ->
+    {any, []};
+
 extract_types([], Acc) ->
     case lists:member(any, Acc) of
         true ->
@@ -155,12 +161,27 @@ extract_types([{type, _L1, list, ListTypes} | Tail], Acc) ->
     extract_types(Tail, Acc2);
 extract_types([{type, _L1, Type, TypeArgs} | Tail], Acc) ->
     % most likely not a good idea
-    Normalised = [erl_parse:normalise(TypeArg) || TypeArg <- TypeArgs],
-    Acc2 = [{Type, Normalised} | Acc],
-    extract_types(Tail, Acc2);
+    case supported_type(Type, TypeArgs) of
+        true ->
+            Normalised = [erl_parse:normalise(TypeArg) || TypeArg <- TypeArgs],
+            Acc2 = [{Type, Normalised} | Acc],
+            extract_types(Tail, Acc2);
+        false ->
+            extract_types(Tail, Acc)
+    end;
 extract_types([Type | Tail], Acc) ->
     Acc2 = [erl_parse:normalise(Type) | Acc],
     extract_types(Tail, Acc2).
+
+supported_type(Type, []) ->
+    Supported = [integer, pos_integer, non_neg_integer, neg_integer, float,
+        number, boolean, binary],
+    lists:member(Type, Supported);
+
+supported_type(record, _) ->
+    % no go way to know if the record is rec2json compiled or not; just have to
+    % trust the user.
+    true.
 
 create_module(RecordName, Fields) ->
     {ok, ModuleDeclaration} = module_declaration(RecordName),

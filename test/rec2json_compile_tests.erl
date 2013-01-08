@@ -486,6 +486,38 @@ prop_record_one() ->
         end
     end).
 
+prop_user_type() ->
+    rec2json_compile:scan_string("-record(prop_user_type, {f :: user_type()} ).", []),
+    ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
+    begin
+        Json = [{<<"f">>, Val}],
+        Expected = {prop_user_type, Val},
+        Got = prop_user_type:from_json(Json),
+        ?debugFmt("Json: ~p\nExpected: ~p; Got: ~p", [Json, Expected, Got]),
+        {ok, Expected} == Got
+    end).
+
+prop_user_type_default() ->
+    rec2json_compile:scan_string("-record(prop_user_type_default, {f  = 3 :: user_type()} ).", []),
+    ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
+    begin
+        Json = [{<<"f">>, Val}],
+        Expected = {prop_user_type_default, Val},
+        Got = prop_user_type_default:from_json(Json),
+        ?debugFmt("Json: ~p\nExpected: ~p; Got: ~p", [Json, Expected, Got]),
+        {ok, Expected} == Got
+    end).
+
+prop_user_type_list() ->
+    rec2json_compile:scan_string("-record(prop_user_type_list, {f :: [user_type()]} ).", []),
+    ?FORALL(List, list({oneof([<<"a">>,<<"b">>,<<"c">>]), oneof([<<"bin">>, int(), real()])}),
+    begin
+        Json = [{<<"f">>, List}],
+        Expected = {prop_user_type_list, List},
+        Got = prop_user_type_list:from_json(Json),
+        {ok, Expected} == Got
+    end).
+
 fold_ind(Fun, Acc, List) ->
     fold_ind(Fun, Acc, 1, List).
 
