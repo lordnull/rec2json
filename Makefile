@@ -13,9 +13,8 @@ deps:
 clean: testclean
 	./rebar clean
 
-distclean: clean devclean relclean ballclean
+distclean: clean
 	./rebar delete-deps
-
 
 TEST_LOG_FILE := eunit.log
 testclean:
