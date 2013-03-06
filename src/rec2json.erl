@@ -23,7 +23,6 @@
 -define(log(Msg), ?log(Msg, [])).
 -endif.
 
--export([parse_file/1,parse_file/2]).
 -export([verify_type/5, verify_types/5]).
 -export([to_json/3, to_json/4]).
 -export([main/1]).
@@ -73,22 +72,6 @@ compile_sources([Src | Tail], Inc, Out) ->
     compile_sources(Tail, Inc, Out).
 
 %% ---------------------------------------------------------------------------
-%% to be used maybe someday?
-%% ---------------------------------------------------------------------------
-
-parse_file(FileName) ->
-    parse_file(FileName, []).
-
-parse_file(FileName, Options) ->
-    {error, nyi}.
-
-parse(String) ->
-    parse(String, []).
-
-parse(String, Opts) ->
-    {error, nyi}.
-
-%% ---------------------------------------------------------------------------
 %% to json
 %% ---------------------------------------------------------------------------
 
@@ -109,7 +92,7 @@ to_json_apply_transformations(_Tuple, [], []) ->
     [{}];
 to_json_apply_transformations(_Typle, Json, []) ->
     Json;
-to_json_apply_transformations(Tuple, Json, [{K, V} = Prop | Tail]) ->
+to_json_apply_transformations(Tuple, Json, [{K, _V} = Prop | Tail]) ->
     Json2 = lists:keystore(K, 1, Json, Prop),
     to_json_apply_transformations(Tuple, Json2, Tail);
 
@@ -160,7 +143,7 @@ to_json_value([{}], _TreatUndef, _Transforms) ->
     {ok, [{}]};
 to_json_value(List, TreatUndef, Transforms) when is_list(List) ->
     PropTest = fun
-        ({K,V}) when is_atom(K) orelse is_binary(K) -> true;
+        ({K,_V}) when is_atom(K) orelse is_binary(K) -> true;
         (_) -> false
     end,
     case lists:all(PropTest, List) of
@@ -265,7 +248,7 @@ verify_type(Val, [Atom | Tail], Any, TreatNull, Opt) when is_binary(Val), is_ato
         _ ->
             verify_type(Val, Tail, Any, TreatNull, Opt)
     end;
-verify_type(Val, [Type | Tail], Any, TreatNull, Opt) ->
+verify_type(Val, [_Type | Tail], Any, TreatNull, Opt) ->
     %?log("unrecognized type ~p, evaling val ~p", [Type, Val]),
     verify_type(Val, Tail, Any, TreatNull, Opt).
 

@@ -81,7 +81,7 @@ output([], _OutputDir) ->
 output([Module | Tail], OutputDir) ->
     {ok, ModName, Bin, _Warnings} = compile:forms(Module, [return]),
     File = filename:join(OutputDir, atom_to_list(ModName) ++ ".beam"),
-    WriteRes = file:write_file(File, Bin),
+    file:write_file(File, Bin),
     output(Tail, OutputDir).
 
 analyze_forms(Forms) ->
@@ -189,13 +189,13 @@ create_module(RecordName, Fields) ->
     {ok, FromOptRecDeclaration} = from_opt_rec_declaration(),
     {ok, ToOptRecDeclaration} = to_opt_rec_declaration(),
     AccessorFuncs = accessor_funcs(Fields),
-    {ok, ToJsonA1} = to_json_arity1_func(Fields),
+    {ok, ToJsonA1} = to_json_arity1_func(),
     {ok, ToJsonA2} = to_json_arity2_func(Fields),
     {ok, ToJson} = to_json_func(Fields),
     {ok, ToJsonTransform} = to_json_transform_func(),
     {ok, FromJsonA1} = from_json_arity1_func(RecordName, Fields),
     {ok, FromJsonA2} = from_json_arity2_func(RecordName, Fields),
-    {ok, FromJsonA3} = from_json_arity3_func(RecordName, Fields),
+    {ok, FromJsonA3} = from_json_arity3_func(),
     {ok, FromJson} = from_json_func(Fields),
     ScrubKeys = scrub_keys_func(Fields),
     BuildFromOptRecFuncs = build_from_opt_rec_func(),
@@ -301,14 +301,12 @@ accessor_funcs([{K, _Default, _Type} | Tail], N, Acc) ->
     {ok, Forms} = erl_parse:parse_form(Tokens),
     accessor_funcs(Tail, N + 1, [Forms | Acc]).
 
-to_json_arity1_func(Fields) ->
-    Length = length(Fields) + 1,
+to_json_arity1_func() ->
     FunctionStr = "to_json(Struct) -> to_json(Struct, []).",
     {ok, Tokens, _Line} = erl_scan:string(FunctionStr),
     erl_parse:parse_form(Tokens).
 
 to_json_arity2_func(Fields) ->
-    Length = length(Fields) + 1,
     FieldNamesStr = [ atom_to_list(Fname) || {Fname, _, _} <- Fields ],
     FieldNamesStr1 = string:join(FieldNamesStr, ","),
     FunctionStr =
@@ -447,7 +445,7 @@ from_json_arity2_func(RecName, Fields) ->
     {ok, FromJsonA2Tokens, _Line} = erl_scan:string(FromJsonA2Str1),
     erl_parse:parse_form(FromJsonA2Tokens).
 
-from_json_arity3_func(RecName, Fields) ->
+from_json_arity3_func() ->
     FromJsonA3Str =
         "from_json(Struct, Json, Opts) when is_list(Opts) ->"
         "    Json2 = scrub_keys(Json),"
