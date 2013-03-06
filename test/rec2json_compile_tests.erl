@@ -1,7 +1,7 @@
 -module(rec2json_compile_tests).
 
+-include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("triq/include/triq.hrl").
 -include("test/rec2json_compile_tests.hrl").
 
 -record(basic_rec, {
@@ -264,7 +264,7 @@ feature_test_() ->
 
     ] end}.
 
-triq_test_() ->
+proper_test_() ->
     Exported = ?MODULE:module_info(exports),
     Exported1 = lists:filter(fun
         ({Atom, 0}) ->
@@ -276,19 +276,19 @@ triq_test_() ->
             false
     end, Exported),
     Exported2 = [F || {F, _} <- Exported1],
-    triq_test_gen(Exported2).
+    proper_test_gen(Exported2).
 
-triq_test_gen([]) ->
+proper_test_gen([]) ->
     {generator, fun() -> [] end};
-triq_test_gen([TriqTest | Tail]) ->
+proper_test_gen([ProperTest | Tail]) ->
     {generator, fun() -> [
-        {atom_to_list(TriqTest), fun() ->
-            ?assert(triq:check(erlang:apply(?MODULE, TriqTest, []), 100))
+        {atom_to_list(ProperTest), fun() ->
+            ?assert(proper:quickcheck(erlang:apply(?MODULE, ProperTest, []), 100))
         end} |
-        triq_test_gen(Tail) ]
+        proper_test_gen(Tail) ]
     end}.
 
-%% triq funcs.
+%% proper funcs.
 prop_integer() ->
     rec2json_compile:scan_string("-record(prop_integer, {f :: integer()}).", []),
     ?FORALL(Val, oneof([int(), real()]),
@@ -493,7 +493,7 @@ prop_user_type() ->
         Json = [{<<"f">>, Val}],
         Expected = {prop_user_type, Val},
         Got = prop_user_type:from_json(Json),
-        ?debugFmt("Json: ~p\nExpected: ~p; Got: ~p", [Json, Expected, Got]),
+        %?debugFmt("Json: ~p\nExpected: ~p; Got: ~p", [Json, Expected, Got]),
         {ok, Expected} == Got
     end).
 
@@ -504,7 +504,7 @@ prop_user_type_default() ->
         Json = [{<<"f">>, Val}],
         Expected = {prop_user_type_default, Val},
         Got = prop_user_type_default:from_json(Json),
-        ?debugFmt("Json: ~p\nExpected: ~p; Got: ~p", [Json, Expected, Got]),
+        %?debugFmt("Json: ~p\nExpected: ~p; Got: ~p", [Json, Expected, Got]),
         {ok, Expected} == Got
     end).
 
