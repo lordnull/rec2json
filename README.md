@@ -1,4 +1,5 @@
 # rec2json
+[![Build Status](https://travis-ci.org/lordnull/rec2json.png)](https://travis-ci.org/lordnull/rec2json.png)
 
 ## Overview
 
