@@ -303,6 +303,18 @@ feature_test_() ->
             Expected = #feature{record_type = 33},
             Json = [{record_type, 33}],
             ?assertEqual({ok, Expected, [record_type]}, feature:from_json(Json))
+        end},
+
+        {"Accessor functions", fun() ->
+            Record = #feature{},
+            Fields = record_info(fields, feature),
+            NameAndN = lists:zip(Fields, lists:seq(2, length(Fields) + 1)),
+            Test = fun({Accessor, Nth}) ->
+                Expected = element(Nth, Record),
+                ?assertEqual(Expected, Record:Accessor()),
+                ?assertEqual(Expected, feature:Accessor(Record))
+            end,
+            lists:map(Test, NameAndN)
         end}
 
     ] end}.
