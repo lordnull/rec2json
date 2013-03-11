@@ -15,6 +15,8 @@
 -module(rec2json_compile).
 
 -export([scan_file/2, scan_string/2]).
+-export([simplify_fields/1, export_declaration/1,
+    opt_record_declarations/0, additional_funcs/2]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -186,8 +188,14 @@ supported_type(record, _) ->
 create_module(RecordName, Fields) ->
     {ok, ModuleDeclaration} = module_declaration(RecordName),
     {ok, ExportDeclaration} = export_declaration(Fields),
-    {ok, FromOptRecDeclaration} = from_opt_rec_declaration(),
-    {ok, ToOptRecDeclaration} = to_opt_rec_declaration(),
+    {ok, OptRecDeclarations} = opt_record_declarations(),
+    %{ok, FromOptRecDeclaration} = from_opt_rec_declaration(),
+    %{ok, ToOptRecDeclaration} = to_opt_rec_declaration(),
+    {ok, NewFunctions} = additional_funcs(RecordName, Fields),
+    [ModuleDeclaration, ExportDeclaration] ++ OptRecDeclarations ++
+        NewFunctions.
+
+additional_funcs(RecordName, Fields) ->
     AccessorFuncs = accessor_funcs(Fields),
     {ok, ToJsonA1} = to_json_arity1_func(),
     {ok, ToJsonA2} = to_json_arity2_func(Fields),
@@ -200,11 +208,16 @@ create_module(RecordName, Fields) ->
     ScrubKeys = scrub_keys_func(Fields),
     BuildFromOptRecFuncs = build_from_opt_rec_func(),
     BuildToOptRecFuncs = build_to_opt_rec_func(),
-    %{ok, FromJson} = from_json_func(RecordName, Fields),
-    [ModuleDeclaration, ExportDeclaration, FromOptRecDeclaration,
-        ToOptRecDeclaration] ++ AccessorFuncs ++ [ToJsonA1, ToJsonA2, ToJson,
-        ToJsonTransform, FromJsonA1, FromJsonA2, FromJsonA3, FromJson] ++ ScrubKeys ++
-        BuildFromOptRecFuncs ++ BuildToOptRecFuncs.
+    GrandFuncList =  AccessorFuncs ++ [ToJsonA1, ToJsonA2, ToJson,
+        ToJsonTransform, FromJsonA1, FromJsonA2, FromJsonA3,
+        FromJson] ++ ScrubKeys ++ BuildFromOptRecFuncs ++
+        BuildToOptRecFuncs,
+    {ok, GrandFuncList}.
+
+opt_record_declarations() ->
+    {ok, ToJsonOptRec} = to_opt_rec_declaration(),
+    {ok, FromJsonOptRec} = from_opt_rec_declaration(),
+    {ok, [ToJsonOptRec, FromJsonOptRec]}.
 
 from_opt_rec_declaration() ->
     Str = "-record(from_json_opt, {treat_null = null}).",

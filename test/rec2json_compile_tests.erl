@@ -3,6 +3,7 @@
 -include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include("test/rec2json_compile_tests.hrl").
+-include("test/test_rec.hrl").
 
 -record(basic_rec, {
     boolean_thing,
@@ -38,6 +39,31 @@ compile_strings_test_() -> [
         ?assert(erlang:function_exported(cst4, to_json, 1))
     end}
     ].
+
+parse_transform_test_() ->
+    {setup, fun() ->
+        ok
+    end, fun(_) ->
+        ok
+    end, fun(_) -> [
+
+        {"compile", fun() ->
+            Got = compile:file("../test/test_rec"),
+            ?assertEqual({ok, test_rec}, Got)
+        end},
+
+        {"The new module can be loaded", fun() ->
+            {ok, _Module, Binary} = compile:file("../test/test_rec", [binary]),
+            ?assertEqual({module, test_rec}, code:load_binary(test_rec, "../test/test_rec", Binary))
+        end},
+
+        {"has to_json/1", fun() ->
+            Exported = test_rec:module_info(exports),
+            ?assertEqual(1, proplists:get_value(to_json, Exported))
+        end}
+
+    ] end}.
+
 feature_test_() ->
     {setup, fun() ->
         rec2json_compile:scan_file("../test/rec2json_compile_tests.hrl", [])

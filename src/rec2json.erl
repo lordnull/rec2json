@@ -26,6 +26,7 @@
 -export([verify_type/5, verify_types/5]).
 -export([to_json/3, to_json/4]).
 -export([main/1]).
+-export([parse_transform/2]).
 
 %% ---------------------------------------------------------------------------
 %% escript file
@@ -70,6 +71,49 @@ compile_sources([Src | Tail], Inc, Out) ->
     io:format("compiling ~s\n", [Src]),
     rec2json_compile:scan_file(Src, [{imports_dir, Inc}, {output_dir, Out}]),
     compile_sources(Tail, Inc, Out).
+
+%% ---------------------------------------------------------------------------
+%% parse transform
+%% ---------------------------------------------------------------------------
+
+parse_transform(Forms, Options) ->
+    ModuleName = hd([Mod || {attribute, _Line, module, Mod} <- Forms]),
+    MaybeRecords = [R || {attribute, _Line, record, {ModuleName, _Fields}} = R <- Forms],
+    case MaybeRecords of
+        [Record] ->
+            SimpleFields = rec2json_compile:simplify_fields(Record),
+            {ok, AdditionalExports} = rec2json_compile:export_declaration(SimpleFields),
+            {ok, AdditionaRecords} = rec2json_compile:opt_record_declarations(),
+            {ok, Functions} = rec2json_compile:additional_funcs(ModuleName, SimpleFields),
+            insert_new_bits(Forms, AdditionaRecords, AdditionalExports, Functions);
+        _ ->
+            Forms
+    end.
+
+insert_new_bits(Forms, Records, Exports, Functions) ->
+    EofSplit = fun
+        ({eof, _}) -> false;
+        (_) -> true
+    end,
+    ExportSplit = fun
+        ({attribute, _Line, export, _Exports}) ->
+            false;
+        (_) ->
+            true
+    end,
+    FunctionsSplit = fun
+        ({function, _Line, _Name, _Arity, _Clauses}) ->
+            false;
+        (_) ->
+            true
+    end,
+    {NoEof, Eof} = lists:splitwith(EofSplit, Forms),
+    {UpToExport, ExportAndRest} = lists:splitwith(ExportSplit, NoEof),
+    {UpToFunctions, OrigFunctions} = lists:splitwith(FunctionsSplit, ExportAndRest),
+    Out = UpToExport ++ Records ++ [Exports] ++ UpToFunctions ++ Functions ++ OrigFunctions ++ Eof,
+    io:format("original:~n~p~n", [Forms]),
+    io:format("new: ~n~p~n", [Out]),
+    Out.
 
 %% ---------------------------------------------------------------------------
 %% to json
