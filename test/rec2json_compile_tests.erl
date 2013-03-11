@@ -58,8 +58,25 @@ parse_transform_test_() ->
         end},
 
         {"has to_json/1", fun() ->
-            Exported = test_rec:module_info(exports),
-            ?assertEqual(1, proplists:get_value(to_json, Exported))
+            ?assert(erlang:function_exported(test_rec, to_json, 1))
+        end},
+
+        {"compile a second with functions", fun() ->
+            Got = compile:file("../test/test_person"),
+            ?assertEqual({ok, test_person}, Got)
+        end},
+
+        {"Can load test_person", fun() ->
+            {ok, _Module, Binary} = compile:file("../test/test_person", [binary]),
+            ?assertEqual({module, test_person}, code:load_binary(test_person, "../test/test_person", Binary))
+        end},
+
+        {"has originally defined function", fun() ->
+            ?assertNot(test_person:is_married(#test_person{}))
+        end},
+
+        {"has to_json/1", fun() ->
+            ?assert(erlang:function_exported(test_person, to_json, 1))
         end}
 
     ] end}.

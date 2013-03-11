@@ -78,7 +78,7 @@ compile_sources([Src | Tail], Inc, Out) ->
 
 parse_transform(Forms, Options) ->
     ModuleName = hd([Mod || {attribute, _Line, module, Mod} <- Forms]),
-    MaybeRecords = [R || {attribute, _Line, record, {ModuleName, _Fields}} = R <- Forms],
+    MaybeRecords = [R || {attribute, _Line, record, {RecordName, _Fields}} = R <- Forms, ModuleName == RecordName],
     case MaybeRecords of
         [Record] ->
             SimpleFields = rec2json_compile:simplify_fields(Record),
@@ -86,7 +86,10 @@ parse_transform(Forms, Options) ->
             {ok, AdditionaRecords} = rec2json_compile:opt_record_declarations(),
             {ok, Functions} = rec2json_compile:additional_funcs(ModuleName, SimpleFields),
             insert_new_bits(Forms, AdditionaRecords, AdditionalExports, Functions);
-        _ ->
+        Records ->
+            io:format("no valid records found~n"
+                "MaybeRecord: ~p~n"
+                "Found: ~p~n", [MaybeRecords, Records]),
             Forms
     end.
 
