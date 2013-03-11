@@ -86,10 +86,7 @@ parse_transform(Forms, Options) ->
             {ok, AdditionaRecords} = rec2json_compile:opt_record_declarations(),
             {ok, Functions} = rec2json_compile:additional_funcs(ModuleName, SimpleFields),
             insert_new_bits(Forms, AdditionaRecords, AdditionalExports, Functions);
-        Records ->
-            io:format("no valid records found~n"
-                "MaybeRecord: ~p~n"
-                "Found: ~p~n", [MaybeRecords, Records]),
+        _Records ->
             Forms
     end.
 
@@ -113,10 +110,7 @@ insert_new_bits(Forms, Records, Exports, Functions) ->
     {NoEof, Eof} = lists:splitwith(EofSplit, Forms),
     {UpToExport, ExportAndRest} = lists:splitwith(ExportSplit, NoEof),
     {UpToFunctions, OrigFunctions} = lists:splitwith(FunctionsSplit, ExportAndRest),
-    Out = UpToExport ++ Records ++ [Exports] ++ UpToFunctions ++ Functions ++ OrigFunctions ++ Eof,
-    io:format("original:~n~p~n", [Forms]),
-    io:format("new: ~n~p~n", [Out]),
-    Out.
+    UpToExport ++ Records ++ [Exports] ++ UpToFunctions ++ Functions ++ OrigFunctions ++ Eof.
 
 %% ---------------------------------------------------------------------------
 %% to json
