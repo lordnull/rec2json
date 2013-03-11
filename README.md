@@ -8,9 +8,15 @@ record definitions, and generates a module for each record to convert that
 record to and from the
 [proposed erlang json standard](http://www.erlang.org/eeps/eep-0018.html)
 
+Alternatively, rec2json includes a parse_transform that allows a module which
+defines (or includes the definition of) a record of the same name to export
+the json conversion and record field accessor functions.
+
 ## Features
 
 * Resulting modules can be used as parameterized modules or pure erlang.
+* Includes a parse transform
+* Resulting escript can create modules from record definition only.
 * Limited type checking on json -> record conversion.
 * Atom 'undefined' fields in records optionally skipped or set to null.
 * Atom 'null' in json optionally converted to 'undefined'.
@@ -28,6 +34,17 @@ To run tests:
     make eunit
 
     make test
+
+## Parse_transform
+
+Rec2json can apply a parse_transform to a module that includes a record of the
+same name to add the to_json/N and from_json/N functions, as well as the field
+accessors. Simpley add the following line near the module attribute:
+
+    -compile([{parse_transform, rec2json}]).
+
+When using only the parse transform, you do not need to have the rec2json script
+available. You will still need rec2json in the release for your application.
 
 ## Compiling Records
 
@@ -179,10 +196,13 @@ default value of the record.
 
 ### Including in a project
 
-The easiest way to use rec2json in your project is to add rec2json to your
-erlang libs path, and add the created rec2json script to your path.  Add
-rec2json as a required application. Finally, during your build (in your
-Makefile or rebar.config precompile hook) call rec2json.
+If all you are using is the parse_transform, simply add rec2json as a
+required application.
+
+To be able to create modules from records without the
+parse transform, you will need to add the rec2json script to your path in some
+manner. Add a call to the rec2json script during your build (in your Makefile
+or rebar.config precompile hook).
 
 ## Type Checking and Converstion
 
