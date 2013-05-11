@@ -119,8 +119,7 @@ simplify_fields([{record_field, _Line, Name} | Tail], Acc) ->
 
 simplify_fields([{record_field, _L1, Name, Default} | Tail], Acc) ->
     Name2 = erl_parse:normalise(Name),
-    Default2 = erl_parse:normalise(Default),
-    simplify_fields(Tail, [{Name2, Default2, {any, []}} | Acc]);
+    simplify_fields(Tail, [{Name2, Default, {any, []}} | Acc]);
 
 simplify_fields([{typed_record_field, {record_field, _L1, Name}, Type} | Tail], Acc) ->
     Name2 = erl_parse:normalise(Name),
@@ -130,8 +129,7 @@ simplify_fields([{typed_record_field, {record_field, _L1, Name}, Type} | Tail], 
 simplify_fields([{typed_record_field, {record_field, _L1, Name, Default}, Type} | Tail], Acc) ->
     Name2 = erl_parse:normalise(Name),
     Types = extract_types(Type),
-    Default2 = erl_parse:normalise(Default),
-    simplify_fields(Tail, [{Name2, Default2, Types} | Acc]).
+    simplify_fields(Tail, [{Name2, Default, Types} | Acc]).
 
 extract_types({type, _L1, union, Types}) ->
     extract_types(Types, []);
@@ -171,6 +169,8 @@ extract_types([{type, _L1, Type, TypeArgs} | Tail], Acc) ->
         false ->
             extract_types(Tail, Acc)
     end;
+extract_types([{remote_type, _L1, _MFA} | Tail], Acc) ->
+    extract_types(Tail, Acc);
 extract_types([Type | Tail], Acc) ->
     Acc2 = [erl_parse:normalise(Type) | Acc],
     extract_types(Tail, Acc2).
@@ -183,7 +183,10 @@ supported_type(Type, []) ->
 supported_type(record, _) ->
     % no go way to know if the record is rec2json compiled or not; just have to
     % trust the user.
-    true.
+    true;
+
+supported_type(_,_) ->
+    false.
 
 create_module(RecordName, Fields) ->
     {ok, ModuleDeclaration} = module_declaration(RecordName),
@@ -397,10 +400,38 @@ to_json_transform_func() ->
     parse_string(Func).
 
 blank_record(RecName, Fields) ->
-    Defaults = [D || {_,D,_} <- Fields],
+    Defaults = [printable_default(D) || {_,D,_} <- Fields],
     TupleBits = [RecName | Defaults],
     Tuple = list_to_tuple(TupleBits),
     lists:flatten(io_lib:format("~p", [Tuple])).
+
+printable_default({call, _L1, ModFunc, Args}) ->
+    ModFunc2 = printable_modfunc(ModFunc),
+    Args2 = [printable_default(Arg) || Arg <- Args],
+    Args3 = insert_commas(Args2),
+		io_lib:format("~p(~p)", [ModFunc2, Args3]);
+
+printable_default(undefined) ->
+    undefined;
+
+printable_default(Abstract) ->
+    erl_parse:normalise(Abstract).
+
+printable_modfunc({remote, _, {atom, _, Mod}, {atom, _, Func}}) ->
+    io_lib:format("~p:~p", [Mod, Func]);
+printable_modfunc({atom, _, Func}) ->
+    io_lib:format("~p", [Func]).
+
+insert_commas(List) ->
+    insert_commas(List, []).
+
+insert_commas([], []) ->
+    [];
+insert_commas([Last], Acc) ->
+    lists:reverse([Last, $, | Acc]);
+insert_commas([Head | Tail], Acc) ->
+    Acc2 = [Head, $, | Acc],
+		insert_commas(Tail, Acc2).
 
 scrub_keys_func(Fields) ->
     Func =
