@@ -15,7 +15,7 @@
 {application, rec2json,
  [
   {description, "Library for parsing records and generating utility modules."},
-  {vsn, "1.5"},
+  {vsn, "1.5.1"},
   {registered, []},
   {applications, [
                   kernel,
