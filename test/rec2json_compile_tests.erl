@@ -37,8 +37,38 @@ compile_strings_test_() -> [
         rec2json_compile:scan_string("-type foobar() :: {pos_integer(), integer()}.\n-record(cst4, {foobar :: [foobar()]}).", []),
         code:load_file(cst4),
         ?assert(erlang:function_exported(cst4, to_json, 1))
+    end},
+
+    {"many different field repesentations", generator, fun() ->
+        Types = [":: basic()", ":: atom", ":: 1", ":: exported:type()",
+            ":: basic(1)", ":: exported:type(1)", ":: basic(basic(atom))",
+            ":: exported:type(basic())", ":: exported:type(basic(1))",
+            "= r2j:default() :: r2j:special()",
+            "= r2j:special(3) :: r2j:special(3)",
+            "= r2j:outer(r2j:special(3))",
+            ":: r2j:special(3) | r2j:special(4)"],
+        Seq = lists:seq(1, length(Types)),
+        Keyed = lists:zip(Seq, Types),
+        Keyed2 = [{integer_to_list(N), V} || {N, V} <- Keyed],
+        types_gen(Keyed2)
     end}
+
     ].
+
+types_gen([]) ->
+    [];
+types_gen([{Nth, Type} | Tail]) ->
+    Generator = fun() ->
+        types_gen(Tail)
+    end,
+    RecordStr = "-record(cst5_" ++ Nth ++ ", {f " ++ Type ++ "}).",
+    Test = fun() ->
+        rec2json_compile:scan_string(RecordStr, []),
+        Module = list_to_atom("cst5_" ++ Nth),
+        code:load_file(Module),
+        ?assert(erlang:function_exported(Module, to_json, 1))
+    end,
+    {generator, fun() -> [{Type, Test} | {generator, Generator}] end}.
 
 parse_transform_test_() ->
     {setup, fun() ->
