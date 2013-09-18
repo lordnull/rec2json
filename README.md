@@ -24,6 +24,8 @@ the json conversion and record field accessor functions.
 * Seed json -> record conversion with a record.
 * Nested json -> record and record -> json conversions for other
 records that have been compiled using rec2json.
+* Generated module has accessor functions for fields and field_names for
+list of fields in the record.
 
 ## Compiling
 
