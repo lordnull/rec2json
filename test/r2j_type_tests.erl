@@ -35,4 +35,18 @@ prop_integer() ->
 		    is_integer(Val) == r2j_type:integer(Val)
 		end).
 
+prop_integer_min_max() ->
+    ?FORALL({Min, Length, Val}, {int(), int(), oneof([int(), real(), <<"bin">>])},
+		begin
+        Max = Min + Length,
+				Expected = if
+				    is_integer(Val) andalso Min =< Val andalso Val =< Max ->
+						    true;
+						true ->
+						    false
+				end,
+				Got = r2j_type:integer(Val, Min, Max),
+				Expected == Got
+		end).
+
 -endif.
