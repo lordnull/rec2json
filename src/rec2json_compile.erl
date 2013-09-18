@@ -169,8 +169,14 @@ extract_types([{type, _L1, Type, TypeArgs} | Tail], Acc) ->
         false ->
             extract_types(Tail, Acc)
     end;
-extract_types([{remote_type, _L1, _MFA} | Tail], Acc) ->
-    extract_types(Tail, Acc);
+extract_types([{remote_type, _L1, [{atom,_L2,Module},{atom,_L3,Function},Args]} | Tail], Acc) ->
+    try [erl_parse:normalise(Abstract) || Abstract <- Args] of
+		    Normals ->
+				    extract_types(Tail, [{Module, Function, Normals} | Acc])
+		catch
+		    _:_ ->
+            extract_types(Tail, Acc)
+		end;
 extract_types([Type | Tail], Acc) ->
     Acc2 = [erl_parse:normalise(Type) | Acc],
     extract_types(Tail, Acc2).

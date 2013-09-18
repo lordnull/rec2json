@@ -289,6 +289,20 @@ verify_type(Val, [Atom | Tail], Any, TreatNull, Opt) when is_binary(Val), is_ato
         _ ->
             verify_type(Val, Tail, Any, TreatNull, Opt)
     end;
+verify_type(Val, [{Module, Function, Args} | Tail], Any, TreatNull, Opt) ->
+    case erlang:function_exported(Module, Function, length(Args) + 1) of
+		    true ->
+				    case erlang:apply(Module, Function, [Val | Args]) of
+                true ->
+								    {ok, Val};
+								{ok, NewVal} ->
+								    {ok, NewVal};
+								false ->
+								    {warn, Val}
+						end;
+				false ->
+				    verify_type(Val, Tail, Any, TreatNull, Opt)
+		end;
 verify_type(Val, [_Type | Tail], Any, TreatNull, Opt) ->
     %?log("unrecognized type ~p, evaling val ~p", [Type, Val]),
     verify_type(Val, Tail, Any, TreatNull, Opt).

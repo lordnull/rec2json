@@ -609,6 +609,22 @@ prop_user_type_list() ->
         {ok, Expected} == Got
     end).
 
+prop_r2j_integer_type() ->
+    rec2json_compile:scan_string("-record(prop_r2j_integer_type, {f :: r2j_type:integer()} ).", []),
+		?FORALL(Val, oneof([<<"bin">>, int(), real()]),
+		begin
+		    Json = [{<<"f">>, Val}],
+				Rec = {prop_r2j_integer_type, Val},
+				Expected = if
+				    is_integer(Val) ->
+				        {ok, Rec};
+						true ->
+						    {ok, Rec, [f]}
+				end,
+				Got = prop_r2j_integer_type:from_json(Json),
+				Expected == Got
+		end).
+
 fold_ind(Fun, Acc, List) ->
     fold_ind(Fun, Acc, 1, List).
 
