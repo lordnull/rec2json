@@ -200,6 +200,7 @@ create_module(RecordName, Fields) ->
 
 additional_funcs(RecordName, Fields) ->
     AccessorFuncs = accessor_funcs(Fields),
+		{ok, FieldListFunc} = get_field_names_func(Fields),
     {ok, ToJsonA1} = to_json_arity1_func(),
     {ok, ToJsonA2} = to_json_arity2_func(Fields),
     {ok, ToJson} = to_json_func(Fields),
@@ -211,7 +212,7 @@ additional_funcs(RecordName, Fields) ->
     ScrubKeys = scrub_keys_func(Fields),
     BuildFromOptRecFuncs = build_from_opt_rec_func(),
     BuildToOptRecFuncs = build_to_opt_rec_func(),
-    GrandFuncList =  AccessorFuncs ++ [ToJsonA1, ToJsonA2, ToJson,
+    GrandFuncList =  AccessorFuncs ++ [FieldListFunc, ToJsonA1, ToJsonA2, ToJson,
         ToJsonTransform, FromJsonA1, FromJsonA2, FromJsonA3,
         FromJson] ++ ScrubKeys ++ BuildFromOptRecFuncs ++
         BuildToOptRecFuncs,
@@ -290,8 +291,8 @@ module_declaration(Name) ->
 
 export_declaration(Fields) ->
     FieldDecs = export_declarations(Fields, []),
-    Decs = ["to_json/1", "to_json/2", "from_json/1", "from_json/2",
-        "from_json/3" | FieldDecs],
+    Decs = ["field_names/0", "to_json/1", "to_json/2", "from_json/1",
+				"from_json/2", "from_json/3" | FieldDecs],
     Decs1 = string:join(Decs, ","),
     String = lists:flatten(io_lib:format("-export([~s]).", [Decs1])),
     {ok, Tokens, _Line} = erl_scan:string(String),
@@ -316,6 +317,11 @@ accessor_funcs([{K, _Default, _Type} | Tail], N, Acc) ->
     {ok, Tokens, _Line} = erl_scan:string(FunctionStr1),
     {ok, Forms} = erl_parse:parse_form(Tokens),
     accessor_funcs(Tail, N + 1, [Forms | Acc]).
+
+get_field_names_func(Fields) ->
+    Names = [F || {F, _, _} <- Fields],
+    Str = lists:flatten(io_lib:format("field_names() -> ~p.", [Names])),
+    parse_string(Str).
 
 to_json_arity1_func() ->
     FunctionStr = "to_json(Struct) -> to_json(Struct, []).",

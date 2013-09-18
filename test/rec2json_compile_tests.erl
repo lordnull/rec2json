@@ -345,7 +345,13 @@ feature_test_() ->
                 ?assertEqual(Expected, feature:Accessor(Record))
             end,
             lists:map(Test, NameAndN)
-        end}
+        end},
+
+				{"Field list function", fun() ->
+            Fields = record_info(fields, feature),
+						Got = feature:field_names(),
+						?assertEqual(Fields, Got)
+				end}
 
     ] end}.
 
