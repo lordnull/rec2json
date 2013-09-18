@@ -347,11 +347,30 @@ feature_test_() ->
             lists:map(Test, NameAndN)
         end},
 
-				{"Field list function", fun() ->
+        {"Field list function", fun() ->
             Fields = record_info(fields, feature),
-						Got = feature:field_names(),
-						?assertEqual(Fields, Got)
-				end}
+            Got = feature:field_names(),
+            ?assertEqual(Fields, Got)
+        end},
+
+        {"Types list", fun() ->
+            Fields = record_info(fields, feature),
+            Got = feature:field_types(),
+            Types = [any, any, [undefined, integer],
+                [undefined, boolean], [undefined, binary],
+                [undefined, {list, [integer]}], [undefined, null],
+                [undefined, {record, included}], [integer],
+                [undefined, integer, boolean], [undefined, pos_integer],
+                [undefined, init, ready, steady],
+                [undefined, {r2j_type, integer, [-100, 100]}]
+            ],
+            Zipped = lists:zip(Fields, Types),
+            ?assertEqual(length(Zipped), length(Got)),
+            GotZipped = lists:zip(Zipped, Got),
+            lists:map(fun({Expected, Got}) ->
+                ?assertEqual(Expected, Got)
+            end, GotZipped)
+        end}
 
     ] end}.
 
@@ -611,35 +630,35 @@ prop_user_type_list() ->
 
 prop_r2j_integer_type() ->
     rec2json_compile:scan_string("-record(prop_r2j_integer_type, {f :: r2j_type:integer()} ).", []),
-		?FORALL(Val, oneof([<<"bin">>, int(), real()]),
-		begin
-		    Json = [{<<"f">>, Val}],
-				Rec = {prop_r2j_integer_type, Val},
-				Expected = if
-				    is_integer(Val) ->
-				        {ok, Rec};
-						true ->
-						    {ok, Rec, [f]}
-				end,
-				Got = prop_r2j_integer_type:from_json(Json),
-				Expected == Got andalso jsx:to_json(Json) == jsx:to_json(prop_r2j_integer_type:to_json(Rec))
-		end).
+    ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
+    begin
+        Json = [{<<"f">>, Val}],
+        Rec = {prop_r2j_integer_type, Val},
+        Expected = if
+            is_integer(Val) ->
+                {ok, Rec};
+            true ->
+                {ok, Rec, [f]}
+        end,
+        Got = prop_r2j_integer_type:from_json(Json),
+        Expected == Got andalso jsx:to_json(Json) == jsx:to_json(prop_r2j_integer_type:to_json(Rec))
+    end).
 
 prop_r2j_integer_min_max_type() ->
     rec2json_compile:scan_string("-record(prop_r2j_integer_min_max_type, {f :: r2j_type:integer(-100, 100)} ).", []),
-		?FORALL(Val, oneof([<<"bin">>, int(), real()]),
-		begin
+    ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
+    begin
         Json = [{<<"f">>, Val}],
-				Rec = {prop_r2j_integer_min_max_type, Val},
-				Expected = if
-				    is_integer(Val), -100 =< Val, Val =< 100 ->
-						    {ok, Rec};
-						true ->
-						    {ok, Rec, [f]}
-				end,
-				Got = prop_r2j_integer_min_max_type:from_json(Json),
-				Expected == Got andalso jsx:to_json(Json) == jsx:to_json(prop_r2j_integer_min_max_type:to_json(Rec))
-		end).
+        Rec = {prop_r2j_integer_min_max_type, Val},
+        Expected = if
+            is_integer(Val), -100 =< Val, Val =< 100 ->
+                {ok, Rec};
+            true ->
+                {ok, Rec, [f]}
+        end,
+        Got = prop_r2j_integer_min_max_type:from_json(Json),
+        Expected == Got andalso jsx:to_json(Json) == jsx:to_json(prop_r2j_integer_min_max_type:to_json(Rec))
+    end).
 
 prop_r2j_min_max_listed() ->
     rec2json_compile:scan_string("-record(prop_r2j_integer_min_max_listed, {f :: [r2j_type:integer(-100, 100)]} ).", []),
@@ -663,7 +682,7 @@ prop_r2j_min_max_listed() ->
         end,
         Got = prop_r2j_integer_min_max_listed:from_json(Json),
         Expected == Got andalso jsx:to_json(Json) == jsx:to_json(prop_r2j_integer_min_max_listed:to_json(Rec))
-		end).
+    end).
 
 fold_ind(Fun, Acc, List) ->
     fold_ind(Fun, Acc, 1, List).

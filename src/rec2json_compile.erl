@@ -171,12 +171,12 @@ extract_types([{type, _L1, Type, TypeArgs} | Tail], Acc) ->
     end;
 extract_types([{remote_type, _L1, [{atom,_L2,Module},{atom,_L3,Function},Args]} | Tail], Acc) ->
     try [erl_parse:normalise(Abstract) || Abstract <- Args] of
-		    Normals ->
-				    extract_types(Tail, [{Module, Function, Normals} | Acc])
-		catch
-		    _:_ ->
+        Normals ->
+            extract_types(Tail, [{Module, Function, Normals} | Acc])
+    catch
+        _:_ ->
             extract_types(Tail, Acc)
-		end;
+    end;
 extract_types([Type | Tail], Acc) ->
     Acc2 = [erl_parse:normalise(Type) | Acc],
     extract_types(Tail, Acc2).
@@ -206,7 +206,8 @@ create_module(RecordName, Fields) ->
 
 additional_funcs(RecordName, Fields) ->
     AccessorFuncs = accessor_funcs(Fields),
-		{ok, FieldListFunc} = get_field_names_func(Fields),
+    {ok, FieldListFunc} = get_field_names_func(Fields),
+    {ok, TypeListFunc} = get_field_types_func(Fields),
     {ok, ToJsonA1} = to_json_arity1_func(),
     {ok, ToJsonA2} = to_json_arity2_func(Fields),
     {ok, ToJson} = to_json_func(Fields),
@@ -218,7 +219,7 @@ additional_funcs(RecordName, Fields) ->
     ScrubKeys = scrub_keys_func(Fields),
     BuildFromOptRecFuncs = build_from_opt_rec_func(),
     BuildToOptRecFuncs = build_to_opt_rec_func(),
-    GrandFuncList =  AccessorFuncs ++ [FieldListFunc, ToJsonA1, ToJsonA2, ToJson,
+    GrandFuncList =  AccessorFuncs ++ [FieldListFunc, TypeListFunc, ToJsonA1, ToJsonA2, ToJson,
         ToJsonTransform, FromJsonA1, FromJsonA2, FromJsonA3,
         FromJson] ++ ScrubKeys ++ BuildFromOptRecFuncs ++
         BuildToOptRecFuncs,
@@ -297,8 +298,8 @@ module_declaration(Name) ->
 
 export_declaration(Fields) ->
     FieldDecs = export_declarations(Fields, []),
-    Decs = ["field_names/0", "to_json/1", "to_json/2", "from_json/1",
-				"from_json/2", "from_json/3" | FieldDecs],
+    Decs = ["field_names/0", "field_types/0", "to_json/1", "to_json/2",
+        "from_json/1", "from_json/2", "from_json/3" | FieldDecs],
     Decs1 = string:join(Decs, ","),
     String = lists:flatten(io_lib:format("-export([~s]).", [Decs1])),
     {ok, Tokens, _Line} = erl_scan:string(String),
@@ -328,6 +329,45 @@ get_field_names_func(Fields) ->
     Names = [F || {F, _, _} <- Fields],
     Str = lists:flatten(io_lib:format("field_names() -> ~p.", [Names])),
     parse_string(Str).
+
+get_field_types_func(Fields) ->
+    TypeProps = lists:map(fun({FieldName, _Default, Types}) ->
+        TypeProp = exportable_types(Types),
+        {FieldName, TypeProp}
+      end, Fields),
+      FuncStr = "field_types() -> ~p.",
+      Str = lists:flatten(io_lib:format(FuncStr, [TypeProps])),
+      parse_string(Str).
+
+exportable_types({any, _}) ->
+    any;
+
+exportable_types({specific, List}) ->
+    NoUndef = lists:delete(undefined, List),
+    % the lists reverse is at the end because the earlier simplify fields
+    % reverses the order the types were declared. By reversing it here,
+    % the types will show up in the same ordered they ere defined for the
+    % record.
+    Cleansed = lists:map(fun exportable_types/1, lists:reverse(NoUndef)),
+    case NoUndef of
+        List ->
+            Cleansed;
+        _Shorter ->
+            [undefined | Cleansed]
+    end;
+
+exportable_types({AtomType, []}) when is_atom(AtomType) ->
+    AtomType;
+
+exportable_types({list, ListDef}) ->
+    Exportable = exportable_types(ListDef),
+    {list, Exportable};
+
+exportable_types({record, [RecName]}) ->
+    {record, RecName};
+
+exportable_types(Wut) ->
+    Wut.
 
 to_json_arity1_func() ->
     FunctionStr = "to_json(Struct) -> to_json(Struct, []).",
@@ -421,7 +461,7 @@ printable_default({call, _L1, ModFunc, Args}) ->
     ModFunc2 = printable_modfunc(ModFunc),
     Args2 = [printable_default(Arg) || Arg <- Args],
     Args3 = insert_commas(Args2),
-		io_lib:format("~p(~p)", [ModFunc2, Args3]);
+    io_lib:format("~p(~p)", [ModFunc2, Args3]);
 
 printable_default(undefined) ->
     undefined;
@@ -443,7 +483,7 @@ insert_commas([Last], Acc) ->
     lists:reverse([Last, $, | Acc]);
 insert_commas([Head | Tail], Acc) ->
     Acc2 = [Head, $, | Acc],
-		insert_commas(Tail, Acc2).
+    insert_commas(Tail, Acc2).
 
 scrub_keys_func(Fields) ->
     Func =
