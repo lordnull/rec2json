@@ -10,6 +10,7 @@
 
 -export([integer/1]).
 -export([integer/3]).
+-export([string/2]).
 
 
 integer(N) ->
@@ -18,5 +19,10 @@ integer(N) ->
 integer(N, Min, Max) when is_integer(N), Min =< N, N =< Max ->
     true;
 integer(_,_,_) ->
+    false.
+
+string(Str, Len) when is_binary(Str) ->
+    size(Str) =< Len;
+string(_Str, _Len) ->
     false.
 

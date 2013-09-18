@@ -49,4 +49,18 @@ prop_integer_min_max() ->
 				Expected == Got
 		end).
 
+prop_string() ->
+    ?FORALL({Val, MaybeLen}, {binary(), int()},
+		begin
+        Len = abs(MaybeLen),
+				Expected = if
+				    size(Val) =< Len ->
+						    true;
+						true ->
+						    false
+				end,
+				Got = r2j_type:string(Val, Len),
+				Expected == Got
+		end).
+
 -endif.
