@@ -641,6 +641,30 @@ prop_r2j_integer_min_max_type() ->
 				Expected == Got
 		end).
 
+prop_r2j_min_max_listed() ->
+    rec2json_compile:scan_string("-record(prop_r2j_integer_min_max_listed, {f :: [r2j_type:integer(-100, 100)]} ).", []),
+    ?FORALL(Val, list(oneof([<<"bin">>, int(), real()])),
+    begin
+        Json = [{<<"f">>, Val}],
+        Rec = {prop_r2j_integer_min_max_listed, Val},
+        FoldFun = fun
+            (Int, _Index, Acc) when is_integer(Int), -100 =< Int, Int =< 100 ->
+                Acc;
+            (Bad, Index, Acc) ->
+                [Index | Acc]
+        end,
+        Expected = case fold_ind(FoldFun, [], Val) of
+            [] ->
+                {ok, Rec};
+            Warns ->
+                RevWarns = lists:reverse(Warns),
+                TaggedWarns = [[f, N] || N <- RevWarns],
+                {ok, Rec, TaggedWarns}
+        end,
+        Got = prop_r2j_integer_min_max_listed:from_json(Json),
+        Expected == Got
+		end).
+
 fold_ind(Fun, Acc, List) ->
     fold_ind(Fun, Acc, 1, List).
 
