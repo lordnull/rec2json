@@ -622,7 +622,7 @@ prop_r2j_integer_type() ->
 						    {ok, Rec, [f]}
 				end,
 				Got = prop_r2j_integer_type:from_json(Json),
-				Expected == Got
+				Expected == Got andalso jsx:to_json(Json) == jsx:to_json(prop_r2j_integer_type:to_json(Rec))
 		end).
 
 prop_r2j_integer_min_max_type() ->
@@ -638,7 +638,7 @@ prop_r2j_integer_min_max_type() ->
 						    {ok, Rec, [f]}
 				end,
 				Got = prop_r2j_integer_min_max_type:from_json(Json),
-				Expected == Got
+				Expected == Got andalso jsx:to_json(Json) == jsx:to_json(prop_r2j_integer_min_max_type:to_json(Rec))
 		end).
 
 prop_r2j_min_max_listed() ->
@@ -662,7 +662,7 @@ prop_r2j_min_max_listed() ->
                 {ok, Rec, TaggedWarns}
         end,
         Got = prop_r2j_integer_min_max_listed:from_json(Json),
-        Expected == Got
+        Expected == Got andalso jsx:to_json(Json) == jsx:to_json(prop_r2j_integer_min_max_listed:to_json(Rec))
 		end).
 
 fold_ind(Fun, Acc, List) ->
