@@ -1,9 +1,11 @@
--module(rec2json_compile_tests).
+-module(r2j_compile_tests).
 
 -include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include("test/rec2json_compile_tests.hrl").
+-include("test/r2j_compile_tests.hrl").
 -include("test/test_rec.hrl").
+
+-export([point/1]).
 
 -record(basic_rec, {
     boolean_thing,
@@ -14,19 +16,19 @@
 
 compile_strings_test_() -> [
     {"simple record compile", fun() ->
-        rec2json_compile:scan_string("-record(cst1, {}).", []),
+        r2j_compile:scan_string("-record(cst1, {}).", []),
         code:load_file(cst1),
         ?assert(erlang:function_exported(cst1, to_json, 1))
     end},
 
     {"record with a type compile", fun() ->
-        rec2json_compile:scan_string("-record(cst2, {f :: pos_integer()}).", []),
+        r2j_compile:scan_string("-record(cst2, {f :: pos_integer()}).", []),
         code:load_file(cst2),
         ?assert(erlang:function_exported(cst2, to_json, 1))
     end},
 
     {"two records", fun() ->
-        rec2json_compile:scan_string("-record(cst3_1, {f}).\n-record(cst3_2, {baz :: integer()}).", []),
+        r2j_compile:scan_string("-record(cst3_1, {f}).\n-record(cst3_2, {baz :: integer()}).", []),
         code:load_file(cst3_1),
         code:load_file(cst3_2),
         ?assert(erlang:function_exported(cst3_1, to_json, 1)),
@@ -34,7 +36,7 @@ compile_strings_test_() -> [
     end},
 
     {"a type and a record", fun() ->
-        rec2json_compile:scan_string("-type foobar() :: {pos_integer(), integer()}.\n-record(cst4, {foobar :: [foobar()]}).", []),
+        r2j_compile:scan_string("-type foobar() :: {pos_integer(), integer()}.\n-record(cst4, {foobar :: [foobar()]}).", []),
         code:load_file(cst4),
         ?assert(erlang:function_exported(cst4, to_json, 1))
     end},
@@ -63,7 +65,7 @@ types_gen([{Nth, Type} | Tail]) ->
     end,
     RecordStr = "-record(cst5_" ++ Nth ++ ", {f " ++ Type ++ "}).",
     Test = fun() ->
-        rec2json_compile:scan_string(RecordStr, []),
+        r2j_compile:scan_string(RecordStr, []),
         Module = list_to_atom("cst5_" ++ Nth),
         code:load_file(Module),
         ?assert(erlang:function_exported(Module, to_json, 1))
@@ -113,7 +115,7 @@ parse_transform_test_() ->
 
 feature_test_() ->
     {setup, fun() ->
-        rec2json_compile:scan_file("../test/rec2json_compile_tests.hrl", [])
+        r2j_compile:scan_file("../test/r2j_compile_tests.hrl", [])
     end, fun(_) ->
         ok
     end, fun(_) -> [
@@ -198,7 +200,7 @@ feature_test_() ->
         end},
 
         {"To json, atom becomes binary", fun() ->
-          ?debugFmt("~p", [proplists:get_value(rec2json_compile, code:all_loaded())]),
+          ?debugFmt("~p", [proplists:get_value(r2j_compile, code:all_loaded())]),
           Record = #included{field = 'an atom'},
           ?assertEqual([{field, <<"an atom">>}], Record:to_json())
         end},
@@ -400,7 +402,7 @@ proper_test_gen([ProperTest | Tail]) ->
 
 %% proper funcs.
 prop_integer() ->
-    rec2json_compile:scan_string("-record(prop_integer, {f :: integer()}).", []),
+    r2j_compile:scan_string("-record(prop_integer, {f :: integer()}).", []),
     ?FORALL(Val, oneof([int(), real()]),
     begin
         Expected = {prop_integer, Val},
@@ -415,7 +417,7 @@ prop_integer() ->
     end).
 
 prop_pos_integer() ->
-    rec2json_compile:scan_string("-record(prop_pos_integer, {f :: pos_integer()}).", []),
+    r2j_compile:scan_string("-record(prop_pos_integer, {f :: pos_integer()}).", []),
     ?FORALL(Int, int(),
     begin
         Expected = {prop_pos_integer, Int},
@@ -430,7 +432,7 @@ prop_pos_integer() ->
     end).
 
 prop_int_or_bool() ->
-    rec2json_compile:scan_string("-record(prop_int_or_bool, {f :: integer() | boolean()}).", []),
+    r2j_compile:scan_string("-record(prop_int_or_bool, {f :: integer() | boolean()}).", []),
     ?FORALL(IntOrBool, oneof([int(), bool(), binary(), real()]),
     begin
         Expected = {prop_int_or_bool, IntOrBool},
@@ -445,7 +447,7 @@ prop_int_or_bool() ->
     end).
 
 prop_atoms() ->
-    rec2json_compile:scan_string("-record(prop_atoms, {f :: 'init' | 'ready' | 'steady'}).", []),
+    r2j_compile:scan_string("-record(prop_atoms, {f :: 'init' | 'ready' | 'steady'}).", []),
     ?FORALL(Atom, oneof([init, ready, steady, go, stop, hop]),
     begin
         Json = [{f, list_to_binary(atom_to_list(Atom))}],
@@ -461,7 +463,7 @@ prop_atoms() ->
     end).
 
 prop_non_neg_integer() ->
-    rec2json_compile:scan_string("-record(prop_non_neg_integer, {f :: non_neg_integer()}).", []),
+    r2j_compile:scan_string("-record(prop_non_neg_integer, {f :: non_neg_integer()}).", []),
     ?FORALL(Int, int(),
     begin
         Json = [{f, Int}],
@@ -476,7 +478,7 @@ prop_non_neg_integer() ->
     end).
 
 prop_boolean() ->
-    rec2json_compile:scan_string("-record(prop_boolean, {f :: boolean()}).", []),
+    r2j_compile:scan_string("-record(prop_boolean, {f :: boolean()}).", []),
     ?FORALL(Bool, oneof([bool(), goober]),
     begin
         Expected = {prop_boolean, Bool},
@@ -491,7 +493,7 @@ prop_boolean() ->
     end).
 
 prop_neg_integer() ->
-    rec2json_compile:scan_string("-record(prop_neg_integer, {f :: neg_integer()}).", []),
+    r2j_compile:scan_string("-record(prop_neg_integer, {f :: neg_integer()}).", []),
     ?FORALL(Int, int(),
     begin
         Expected = {prop_neg_integer, Int},
@@ -506,7 +508,7 @@ prop_neg_integer() ->
     end).
 
 prop_number() ->
-    rec2json_compile:scan_string("-record(prop_number, {f :: number()}).", []),
+    r2j_compile:scan_string("-record(prop_number, {f :: number()}).", []),
     ?FORALL(Number, oneof([int(), real(), goober]),
     begin
         Expected = {prop_number, Number},
@@ -521,7 +523,7 @@ prop_number() ->
     end).
 
 prop_binary() ->
-    rec2json_compile:scan_string("-record(prop_binary, {f :: binary()}).", []),
+    r2j_compile:scan_string("-record(prop_binary, {f :: binary()}).", []),
     ?FORALL(Binary, oneof([list(int()), binary()]),
     begin
         Expected = {prop_binary, Binary},
@@ -536,7 +538,7 @@ prop_binary() ->
     end).
 
 prop_float() ->
-    rec2json_compile:scan_string("-record(prop_float, {f :: float()}).", []),
+    r2j_compile:scan_string("-record(prop_float, {f :: float()}).", []),
     ?FORALL(Float, oneof([int(), real()]),
     begin
         Expected = {prop_float, Float},
@@ -551,7 +553,7 @@ prop_float() ->
     end).
 
 prop_list_one() ->
-    rec2json_compile:scan_string("-record(prop_list_one, {f :: [integer()]}).", []),
+    r2j_compile:scan_string("-record(prop_list_one, {f :: [integer()]}).", []),
     ?FORALL(List, list(oneof([int(), real()])),
     begin
         Expected = {prop_list_one, List},
@@ -573,8 +575,8 @@ prop_list_one() ->
     end).
 
 prop_record_one() ->
-    rec2json_compile:scan_string("-record(prop_record_one_outer, {f :: #prop_record_one_inner{}}).", []),
-    rec2json_compile:scan_string("-record(prop_record_one_inner, {f :: integer()}).", []),
+    r2j_compile:scan_string("-record(prop_record_one_outer, {f :: #prop_record_one_inner{}}).", []),
+    r2j_compile:scan_string("-record(prop_record_one_inner, {f :: integer()}).", []),
     ?FORALL(SubRec, oneof([int(), [{}], [{f, oneof([int(), real()])}]]),
     begin
         {Json, Expected, Warns} = case SubRec of
@@ -597,7 +599,7 @@ prop_record_one() ->
     end).
 
 prop_user_type() ->
-    rec2json_compile:scan_string("-record(prop_user_type, {f :: user_type()} ).", []),
+    r2j_compile:scan_string("-record(prop_user_type, {f :: user_type()} ).", []),
     ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
     begin
         Json = [{<<"f">>, Val}],
@@ -608,7 +610,7 @@ prop_user_type() ->
     end).
 
 prop_user_type_default() ->
-    rec2json_compile:scan_string("-record(prop_user_type_default, {f  = 3 :: user_type()} ).", []),
+    r2j_compile:scan_string("-record(prop_user_type_default, {f  = 3 :: user_type()} ).", []),
     ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
     begin
         Json = [{<<"f">>, Val}],
@@ -619,7 +621,7 @@ prop_user_type_default() ->
     end).
 
 prop_user_type_list() ->
-    rec2json_compile:scan_string("-record(prop_user_type_list, {f :: [user_type()]} ).", []),
+    r2j_compile:scan_string("-record(prop_user_type_list, {f :: [user_type()]} ).", []),
     ?FORALL(List, list({oneof([<<"a">>,<<"b">>,<<"c">>]), oneof([<<"bin">>, int(), real()])}),
     begin
         Json = [{<<"f">>, List}],
@@ -629,7 +631,7 @@ prop_user_type_list() ->
     end).
 
 prop_r2j_integer_type() ->
-    rec2json_compile:scan_string("-record(prop_r2j_integer_type, {f :: r2j_type:integer()} ).", []),
+    r2j_compile:scan_string("-record(prop_r2j_integer_type, {f :: r2j_type:integer()} ).", []),
     ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
     begin
         Json = [{<<"f">>, Val}],
@@ -645,7 +647,7 @@ prop_r2j_integer_type() ->
     end).
 
 prop_r2j_integer_min_max_type() ->
-    rec2json_compile:scan_string("-record(prop_r2j_integer_min_max_type, {f :: r2j_type:integer(-100, 100)} ).", []),
+    r2j_compile:scan_string("-record(prop_r2j_integer_min_max_type, {f :: r2j_type:integer(-100, 100)} ).", []),
     ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
     begin
         Json = [{<<"f">>, Val}],
@@ -661,7 +663,7 @@ prop_r2j_integer_min_max_type() ->
     end).
 
 prop_r2j_min_max_listed() ->
-    rec2json_compile:scan_string("-record(prop_r2j_integer_min_max_listed, {f :: [r2j_type:integer(-100, 100)]} ).", []),
+    r2j_compile:scan_string("-record(prop_r2j_integer_min_max_listed, {f :: [r2j_type:integer(-100, 100)]} ).", []),
     ?FORALL(Val, list(oneof([<<"bin">>, int(), real()])),
     begin
         Json = [{<<"f">>, Val}],
@@ -684,6 +686,16 @@ prop_r2j_min_max_listed() ->
         Expected == Got andalso jsx:to_json(Json) == jsx:to_json(prop_r2j_integer_min_max_listed:to_json(Rec))
     end).
 
+prop_r2j_type_translation() ->
+    r2j_compile:scan_string("-record(type_translation, {p :: r2j_compile_tests:point()} ).", []),
+		?FORALL({X, Y} = RecVal, {int(), int()},
+		begin
+        Json = [{<<"p">>, [{<<"x">>, X}, {<<"y">>, Y}]}],
+				Rec = {type_translation, RecVal},
+				Got = type_translation:from_json(Json),
+				{ok, Rec} == Got andalso jsx:to_json(Json) == jsx:to_json(type_translation:to_json(Rec))
+		end).
+
 fold_ind(Fun, Acc, List) ->
     fold_ind(Fun, Acc, 1, List).
 
@@ -692,3 +704,15 @@ fold_ind(_Fun, Acc, _Ind, []) ->
 fold_ind(Fun, Acc, Ind, [Item | Tail]) ->
     Acc2 = Fun(Item, Ind, Acc),
     fold_ind(Fun, Acc2, Ind + 1, Tail).
+
+point({X,Y}) ->
+    {ok, [{x,X},{y,Y}]};
+
+point(List) when is_list(List) ->
+    X = proplists:get_value(x, List, 0),
+		Y = proplists:get_value(y, List, 0),
+		{ok, {X,Y}};
+
+point(_) ->
+    false.
+

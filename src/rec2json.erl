@@ -69,7 +69,7 @@ compile_sources([], _Inc, _Out) ->
 
 compile_sources([Src | Tail], Inc, Out) ->
     io:format("compiling ~s\n", [Src]),
-    rec2json_compile:scan_file(Src, [{imports_dir, Inc}, {output_dir, Out}]),
+    r2j_compile:scan_file(Src, [{imports_dir, Inc}, {output_dir, Out}]),
     compile_sources(Tail, Inc, Out).
 
 %% ---------------------------------------------------------------------------
@@ -81,10 +81,10 @@ parse_transform(Forms, Options) ->
     MaybeRecords = [R || {attribute, _Line, record, {RecordName, _Fields}} = R <- Forms, ModuleName == RecordName],
     case MaybeRecords of
         [Record] ->
-            SimpleFields = rec2json_compile:simplify_fields(Record),
-            {ok, AdditionalExports} = rec2json_compile:export_declaration(SimpleFields),
-            {ok, AdditionaRecords} = rec2json_compile:opt_record_declarations(),
-            {ok, Functions} = rec2json_compile:additional_funcs(ModuleName, SimpleFields),
+            SimpleFields = r2j_compile:simplify_fields(Record),
+            {ok, AdditionalExports} = r2j_compile:export_declaration(SimpleFields),
+            {ok, AdditionaRecords} = r2j_compile:opt_record_declarations(),
+            {ok, Functions} = r2j_compile:additional_funcs(ModuleName, SimpleFields),
             insert_new_bits(Forms, AdditionaRecords, AdditionalExports, Functions);
         _Records ->
             Forms

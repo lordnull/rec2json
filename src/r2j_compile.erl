@@ -12,7 +12,7 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(rec2json_compile).
+-module(r2j_compile).
 
 -export([scan_file/2, scan_string/2]).
 -export([simplify_fields/1, export_declaration/1,
