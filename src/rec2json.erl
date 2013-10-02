@@ -23,10 +23,11 @@
 -define(log(Msg), ?log(Msg, [])).
 -endif.
 
--export([verify_type/5, verify_types/5]).
--export([to_json/3, to_json/4]).
--export([main/1]).
 -export([parse_transform/2]).
+-export([verify_type/5, verify_types/5]).
+-export([to_json/1, to_json/2]).
+-export([from_json/3]).
+-export([main/1]).
 
 %% ---------------------------------------------------------------------------
 %% escript file
@@ -76,21 +77,20 @@ compile_sources([Src | Tail], Inc, Out) ->
 %% parse transform
 %% ---------------------------------------------------------------------------
 
-parse_transform(Forms, Options) ->
+parse_transform(Forms, _Options) ->
     ModuleName = hd([Mod || {attribute, _Line, module, Mod} <- Forms]),
     MaybeRecords = [R || {attribute, _Line, record, {RecordName, _Fields}} = R <- Forms, ModuleName == RecordName],
     case MaybeRecords of
         [Record] ->
             SimpleFields = r2j_compile:simplify_fields(Record),
             {ok, AdditionalExports} = r2j_compile:export_declaration(SimpleFields),
-            {ok, AdditionaRecords} = r2j_compile:opt_record_declarations(),
             {ok, Functions} = r2j_compile:additional_funcs(ModuleName, SimpleFields),
-            insert_new_bits(Forms, AdditionaRecords, AdditionalExports, Functions);
+            insert_new_bits(Forms, AdditionalExports, Functions);
         _Records ->
             Forms
     end.
 
-insert_new_bits(Forms, Records, Exports, Functions) ->
+insert_new_bits(Forms, Exports, Functions) ->
     EofSplit = fun
         ({eof, _}) -> false;
         (_) -> true
@@ -110,24 +110,215 @@ insert_new_bits(Forms, Records, Exports, Functions) ->
     {NoEof, Eof} = lists:splitwith(EofSplit, Forms),
     {UpToExport, ExportAndRest} = lists:splitwith(ExportSplit, NoEof),
     {UpToFunctions, OrigFunctions} = lists:splitwith(FunctionsSplit, ExportAndRest),
-    UpToExport ++ Records ++ [Exports] ++ UpToFunctions ++ Functions ++ OrigFunctions ++ Eof.
+    UpToExport ++ [Exports] ++ UpToFunctions ++ Functions ++ OrigFunctions ++ Eof.
 
 %% ---------------------------------------------------------------------------
 %% to json
 %% ---------------------------------------------------------------------------
 
-to_json(Tuple, FieldNames, Options) ->
-    {TreatUndef, Transforms} = extract_to_json_opts(Options),
-    to_json(Tuple, FieldNames, TreatUndef, Transforms).
+to_json(Tuple) ->
+    to_json(Tuple, []).
 
-to_json(Tuple, FieldNames, TreatUndef, Transforms) ->
-    [_RecName | Values] = tuple_to_list(Tuple),
-    Proplist = lists:zip(FieldNames, Values),
-    ToTransforms = case to_json_props(Proplist, TreatUndef, Transforms) of
-        [{}] -> [];
-        JsonProp -> JsonProp
+to_json(Tuple, Options) when is_tuple(Tuple) ->
+    {TreatUndef, Transforms} = extract_to_json_opts(Options),
+    [Module | Values] = tuple_to_list(Tuple),
+    Types = Module:field_types(),
+    Zipped = lists:zip(Values, Types),
+    {TreatUndef, ReversedJsonProps} = lists:foldl(fun
+        ({undefined, {Name, _FTypes}}, {skip, Acc}) ->
+            {skip, Acc};
+        ({undefined, {Name, _FTypes}}, {null, Acc}) ->
+            {null, [{Name, null} | Acc]};
+        ({Value, {Name, FTypes}}, {UndefIs, Acc}) ->
+            case maybe_convertable(Value, FTypes, Options) of
+                error ->
+                    erlang:error({badarg, {Name, Value, FTypes}});
+                {ok, _NewVal, _Warns} ->
+                    erlang:error({badarg, {Name, Value, FTypes}});
+                {ok, undefined} when UndefIs =:= skip ->
+                    {UndefIs, Acc};
+                {ok, undefined} when UndefIs =:= null ->
+                    {UndefIs, [{Name, null} | Acc]};
+                {ok, NewVal} when is_atom(NewVal) ->
+                    {UndefIs, [{Name, list_to_binary(atom_to_list(NewVal))} | Acc]};
+                {ok, NewVal} ->
+                    {UndefIs, [{Name, NewVal} | Acc]}
+            end
+    end, {TreatUndef, []}, Zipped),
+    UntransformedJson = lists:reverse(ReversedJsonProps),
+    to_json_apply_transformations(Tuple, UntransformedJson, Transforms).
+
+from_json(SeedTuple, [{}], _Options) ->
+    {ok, SeedTuple};
+
+from_json(SeedTuple, Json, Options) ->
+    Module = element(1, SeedTuple),
+    Names = Module:field_names(),
+    Types = Module:field_types(),
+    Elems = lists:seq(2, length(Names) + 1),
+    NameBins = [list_to_binary(atom_to_list(N)) || N <- Names],
+    Zipper = fun(Name, TypeList, Elem) ->
+        {Name, {Elem, TypeList}}
     end,
-    to_json_apply_transformations(Tuple, ToTransforms, Transforms).
+    Zipped = lists:zipwith3(Zipper, NameBins, Types, Elems),
+    TreatNull = proplists:get_value(null_is_undefined, Options, false),
+    from_json(Zipped, Json, TreatNull, SeedTuple, []).
+
+from_json(_Zipped, [], _TreatNull, Tuple, []) ->
+    {ok, Tuple};
+
+from_json(_Zipped, [], _TreatNull, Tuple, Warnings) ->
+    {ok, Tuple, lists:reverse(Warnings)};
+
+from_json(Zipped, [{NameAtom, Value} | Json], TreatNull, Tuple, Warnings) when is_atom(NameAtom) ->
+    NameBin = list_to_binary(atom_to_list(NameAtom)),
+    from_json(Zipped, [{NameBin, Value} | Json], TreatNull, Tuple, Warnings);
+
+from_json(Zipped, [{Name, null} | Json], true, Tuple, Warnings) ->
+    from_json(Zipped, [{Name, undefined} | Json], true, Tuple, Warnings);
+
+from_json(Zipped, [{Name, Value} | Json], TreatNull, Tuple, Warnings) ->
+    case proplists:get_value(Name, Zipped) of
+        undefined ->
+            from_json(Zipped, Json, TreatNull, Tuple, Warnings);
+        {Elem, Types} ->
+            Options = if
+                TreatNull ->
+                    [null_is_undefined];
+                true ->
+                    []
+            end,
+            case maybe_convertable(Value, Types, Options) of
+                error ->
+                    Tuple2 = setelement(Elem, Tuple, Value),
+                    Warnings2 = [list_to_atom(binary_to_list(Name)) | Warnings],
+                    from_json(Zipped, Json, TreatNull, Tuple2, Warnings2);
+                {ok, Value2} ->
+                    Tuple2 = setelement(Elem, Tuple, Value2),
+                    from_json(Zipped, Json, TreatNull, Tuple2, Warnings);
+                {ok, Value2, SubWarns} ->
+                    Tuple2 = setelement(Elem, Tuple, Value2),
+                    Warnings2 = lists:foldl(fun(SubWarn, Warns) ->
+                        NameAtom = list_to_atom(binary_to_list(Name)),
+                        [[NameAtom, SubWarn] | Warns]
+                    end, Warnings, SubWarns),
+                    from_json(Zipped, Json, TreatNull, Tuple2, Warnings2)
+            end
+    end.
+
+maybe_convertable(Value, any, Options) ->
+    maybe_convertable(Value, {any, []}, Options);
+
+maybe_convertable(Value, {AnyNess, Types}, Options) ->
+    ConvertRes = maybe_convertable(Value, Types, Options),
+    case {ConvertRes, AnyNess} of
+        {error, specific} ->
+            error;
+        {error, any} ->
+            {ok, Value};
+        {Else, _} ->
+            Else
+    end;
+
+maybe_convertable(_Value, [], _Options) ->
+    error;
+
+maybe_convertable(Value, [{Mod, Func, Args} | Types], Options) ->
+    Arity = length(Args) + 1,
+    case erlang:function_exported(Mod, Func, Arity) of
+        true ->
+            case erlang:apply(Mod, Func, [Value | Args]) of
+                error ->
+                    maybe_convertable(Value, Types, Options);
+                Else ->
+                    Else
+            end;
+        false ->
+            maybe_convertable(Value, Types, Options)
+    end;
+
+maybe_convertable(null, [undefined | Types], Options) ->
+    case proplists:get_value(null_is_undefined, Options, false) of
+        true ->
+            {ok, undefined};
+        false ->
+            maybe_convertable(null, Types, Options)
+    end;
+
+maybe_convertable(null, [null | _Types], _Options) ->
+    {ok, null};
+
+maybe_convertable(Value, [Atom | Types], Options) when is_atom(Atom) ->
+    case r2j_type:atom(Value, Atom) of
+        error ->
+            maybe_convertable(Value, Types, Options);
+        Else ->
+            Else
+    end;
+
+maybe_convertable(Tuple, [{record, RecName} | Types], Options) when is_tuple(Tuple) andalso element(1, Tuple) =:= RecName ->
+    try RecName:to_json(Tuple, Options) of
+        Json ->
+            {ok, Json}
+    catch
+        error:undef ->
+            maybe_convertable(Tuple, Types, Options)
+    end;
+
+maybe_convertable([{}], [{record, RecName} | Types], Options) ->
+    try RecName:from_json([{}], Options) of
+        Res ->
+            Res
+    catch
+        error:undef ->
+            maybe_convertable([{}], Types, Options)
+    end;
+
+maybe_convertable(Json, [{record, RecName} | Types], Options) when is_list(Json), length(Json) > 0 ->
+    AllTuples = lists:all(fun(In) ->
+        case In of
+            {_,_} -> true;
+            _ -> false
+        end
+    end, Json),
+    if
+        AllTuples ->
+            try RecName:from_json(Json, Options) of
+                Res ->
+                    Res
+            catch
+                error:undef ->
+                    maybe_convertable(Json, Types, Options)
+            end;
+        true ->
+            maybe_convertable(Json, Types, Options)
+    end;
+
+maybe_convertable(Value, [{record, _RecName} | Types], Options) ->
+    maybe_convertable(Value, Types, Options);
+
+maybe_convertable(Values, [{list, ListTypes} | Types], Options) when is_list(Values) ->
+    Indexs = lists:seq(1, length(Values)),
+    Indexed = lists:zip(Indexs, Values),
+    {NewValues, Warnings} = lists:foldl(fun({Index, Value}, {ValAcc, WarnAcc}) ->
+        case maybe_convertable(Value, ListTypes, Options) of
+            error ->
+                {ValAcc ++ [Value], WarnAcc ++ [Index]};
+            {ok, NewVal} ->
+                {ValAcc ++ [NewVal], WarnAcc};
+            {ok, NewVal, NewWarns} ->
+                {ValAcc ++ [NewVal], WarnAcc ++ [[Index | W] || W <- NewWarns]}
+        end
+    end, {[], []}, Indexed),
+    case Warnings of
+        [] ->
+            {ok, NewValues};
+        _ ->
+            {ok, NewValues, Warnings}
+    end;
+
+maybe_convertable(Value, [{list, _ListTypes} | Types], Options) ->
+    maybe_convertable(Value, Types, Options).
 
 to_json_apply_transformations(_Tuple, [], []) ->
     [{}];
@@ -154,79 +345,6 @@ to_json_apply_transformations(Tuple, Json, [Fun | Tail]) when is_function(Fun) -
             Json
     end,
     to_json_apply_transformations(Tuple, Json2, Tail).
-
-to_json_value(undefined, skip, _Transforms) ->
-    skip;
-to_json_value(undefined, null, _Transforms) ->
-    {ok, null};
-to_json_value(Val, _TreatUndef, _Transform) when Val; not Val; Val == null ->
-    {ok, Val};
-to_json_value(Val, _TreatUndef, _Transforms) when is_atom(Val) ->
-    {ok, list_to_binary(atom_to_list(Val))};
-to_json_value(Val, _TreatUndef, _Transforms) when is_binary(Val); is_integer(Val); is_float(Val) ->
-    {ok, Val};
-to_json_value(Tuple, TreatUndef, Transforms) when is_tuple(Tuple), is_atom(element(1, Tuple)) ->
-    RecName = element(1, Tuple),
-    case erlang:function_exported(RecName, to_json, 2) of
-        false ->
-            skip;
-        true ->
-            Trans = case TreatUndef of
-                skip -> Transforms;
-                null -> [{null_is_undefined} | Transforms]
-            end,
-            Json = RecName:to_json(Tuple, Trans),
-            {ok, Json}
-    end;
-to_json_value([], _TreatUndef, _Transforms) ->
-    {ok, []};
-to_json_value([{}], _TreatUndef, _Transforms) ->
-    {ok, [{}]};
-to_json_value(List, TreatUndef, Transforms) when is_list(List) ->
-    PropTest = fun
-        ({K,_V}) when is_atom(K) orelse is_binary(K) -> true;
-        (_) -> false
-    end,
-    case lists:all(PropTest, List) of
-        true ->
-            Val = to_json_props(List, TreatUndef, Transforms),
-            {ok, Val};
-        false ->
-            Vals = to_json_values(List, TreatUndef, Transforms),
-            {ok, Vals}
-    end;
-
-to_json_value(_Val, _TreatUndef, _Transforms) ->
-    skip.
-
-to_json_values(Vals, TreatUndef, Transforms) ->
-    to_json_values(Vals, TreatUndef, Transforms, []).
-
-to_json_values([], _TreatUndef, _Transforms, Acc) ->
-    lists:reverse(Acc);
-
-to_json_values([Val | Tail], TreatUndef, Transforms, Acc) ->
-    case to_json_value(Val, TreatUndef, Transforms) of
-        skip ->
-            to_json_values(Tail, TreatUndef, Transforms);
-        {ok, Val2} ->
-            to_json_values(Tail, TreatUndef, Transforms, [Val2 | Acc])
-    end.
-
-to_json_props(Props, TreatUndef, Transforms) ->
-    to_json_props(Props, TreatUndef, Transforms, []).
-
-to_json_props([], _TreatUndef, _Transforms, []) ->
-    [{}];
-to_json_props([], _TreatUndef, _Transform, Acc) ->
-    lists:reverse(Acc);
-to_json_props([{Key, Val} | Tail], TreatUndef, Transform, Acc) ->
-    case to_json_value(Val, TreatUndef, Transform) of
-        skip ->
-            to_json_props(Tail, TreatUndef, Transform, Acc);
-        {ok, Val2} ->
-            to_json_props(Tail, TreatUndef, Transform, [{Key, Val2} | Acc])
-    end.
 
 extract_to_json_opts(Opts) ->
     extract_to_json_opts(Opts, skip, []).

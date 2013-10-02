@@ -32,7 +32,14 @@ proper_test_gen([ProperTest | Tail]) ->
 prop_integer() ->
     ?FORALL(Val, oneof([int(), real()]),
 		begin
-		    is_integer(Val) == r2j_type:integer(Val)
+		    Got = r2j_type:integer(Val),
+				Expected = if
+				    is_integer(Val) ->
+				        {ok, Val};
+						true ->
+						    error
+				end,
+				Expected == Got
 		end).
 
 prop_integer_min_max() ->
@@ -41,9 +48,9 @@ prop_integer_min_max() ->
         Max = Min + Length,
 				Expected = if
 				    is_integer(Val) andalso Min =< Val andalso Val =< Max ->
-						    true;
+						    {ok, Val};
 						true ->
-						    false
+						    error
 				end,
 				Got = r2j_type:integer(Val, Min, Max),
 				Expected == Got
@@ -55,9 +62,9 @@ prop_string() ->
         Len = abs(MaybeLen),
 				Expected = if
 				    size(Val) =< Len ->
-						    true;
+						    {ok, Val};
 						true ->
-						    false
+						    error
 				end,
 				Got = r2j_type:string(Val, Len),
 				Expected == Got

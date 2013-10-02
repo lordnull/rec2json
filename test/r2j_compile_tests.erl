@@ -358,13 +358,18 @@ feature_test_() ->
         {"Types list", fun() ->
             Fields = record_info(fields, feature),
             Got = feature:field_types(),
-            Types = [any, any, [undefined, integer],
-                [undefined, boolean], [undefined, binary],
-                [undefined, {list, [integer]}], [undefined, null],
-                [undefined, {record, included}], [integer],
-                [undefined, integer, boolean], [undefined, pos_integer],
-                [undefined, init, ready, steady],
-                [undefined, {r2j_type, integer, [-100, 100]}]
+            Types = [{any,[]}, {any,[]},
+						    {specific, [undefined, {r2j_type, integer, []}]},
+                {specific, [undefined, {r2j_type, boolean, []}]},
+								{specific, [undefined, {r2j_type, binary, []}]},
+                {specific, [undefined, {list, {specific, [{r2j_type, integer, []}]}}]},
+								{specific, [undefined, null]},
+                {specific, [undefined, {record, included}]},
+								{specific, [{r2j_type, integer, []}]},
+                {specific, [undefined, {r2j_type, integer, []}, {r2j_type, boolean, []}]},
+								{specific, [undefined, {r2j_type, pos_integer, []}]},
+                {specific, [undefined, init, ready, steady]},
+                {specific, [undefined, {r2j_type, integer, [-100, 100]}]}
             ],
             Zipped = lists:zip(Fields, Types),
             ?assertEqual(length(Zipped), length(Got)),
@@ -643,7 +648,24 @@ prop_r2j_integer_type() ->
                 {ok, Rec, [f]}
         end,
         Got = prop_r2j_integer_type:from_json(Json),
-        Expected == Got andalso jsx:to_json(Json) == jsx:to_json(prop_r2j_integer_type:to_json(Rec))
+				case Got of
+				    Expected ->
+						    try prop_r2j_integer_type:to_json(Rec) of
+								    MaybeGood when is_integer(Val) ->
+										   jsx:to_json(Json) == jsx:to_json(MaybeGood);
+									  NotGood ->
+										    ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
+										    false
+								catch
+								    error:{badarg, {f, Val, {specific, [undefined, {r2j_type, integer, []}]}}} when not is_integer(Val) ->
+										    true;
+										W:Y ->
+										    ?debugFmt("Not the boom I expected: ~p:~p", [W,Y]),
+										    false
+								end;
+						_ ->
+						    ?debugFmt("Expected: ~p; got ~p", [Expected, Got])
+				end
     end).
 
 prop_r2j_integer_min_max_type() ->
@@ -659,7 +681,24 @@ prop_r2j_integer_min_max_type() ->
                 {ok, Rec, [f]}
         end,
         Got = prop_r2j_integer_min_max_type:from_json(Json),
-        Expected == Got andalso jsx:to_json(Json) == jsx:to_json(prop_r2j_integer_min_max_type:to_json(Rec))
+				case Got of
+				    Expected ->
+						    try prop_r2j_integer_min_max_type:to_json(Rec) of
+								    MaybeGood when is_integer(Val), -100 =< Val, Val =< 100 ->
+										    jsx:to_json(Json) == jsx:to_json(MaybeGood);
+										NotGood ->
+										    ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
+												false
+								catch
+								    error:{badarg, {f, Val, {specific, [undefined, {r2j_type, integer, [-100, 100]}]}}} when not is_integer(Val); Val < -100; 100 < Val ->
+										    true;
+										W:Y ->
+										    ?debugFmt("not the boom I expected: ~p:~p", [W,Y]),
+												false
+								end;
+						_ ->
+						    ?debugFmt("Expected: ~p; got: ~p", [Expected, Got])
+				end
     end).
 
 prop_r2j_min_max_listed() ->
@@ -683,18 +722,39 @@ prop_r2j_min_max_listed() ->
                 {ok, Rec, TaggedWarns}
         end,
         Got = prop_r2j_integer_min_max_listed:from_json(Json),
-        Expected == Got andalso jsx:to_json(Json) == jsx:to_json(prop_r2j_integer_min_max_listed:to_json(Rec))
+				IsGoodValue = lists:all(fun(N) ->
+				    is_integer(N) andalso -100 =< N andalso N =< 100
+				end, Val),
+				case Got of
+				    Expected ->
+						    try prop_r2j_integer_min_max_listed:to_json(Rec) of
+								    Good when IsGoodValue ->
+										    jsx:to_json(Json) == jsx:to_json(Good);
+										NotGood ->
+										    ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
+												false
+								catch
+								    error:{badarg, {f, Val, {specific, [undefined, {list, {specific, [{r2j_type, integer, [-100, 100]}]}}]}}} when not IsGoodValue ->
+										    true;
+										W:Y ->
+										    ?debugFmt("not the boom I was expected: ~p:~p", [W,Y]),
+												false
+								end;
+						_ ->
+						    ?debugFmt("Expected: ~p; got ~p", [Expected, Got]),
+								false
+				end
     end).
 
 prop_r2j_type_translation() ->
     r2j_compile:scan_string("-record(type_translation, {p :: r2j_compile_tests:point()} ).", []),
-		?FORALL({X, Y} = RecVal, {int(), int()},
-		begin
+        ?FORALL({X, Y} = RecVal, {int(), int()},
+        begin
         Json = [{<<"p">>, [{<<"x">>, X}, {<<"y">>, Y}]}],
-				Rec = {type_translation, RecVal},
-				Got = type_translation:from_json(Json),
-				{ok, Rec} == Got andalso jsx:to_json(Json) == jsx:to_json(type_translation:to_json(Rec))
-		end).
+        Rec = {type_translation, RecVal},
+        Got = type_translation:from_json(Json),
+        {ok, Rec} == Got andalso jsx:to_json(Json) == jsx:to_json(type_translation:to_json(Rec))
+    end).
 
 fold_ind(Fun, Acc, List) ->
     fold_ind(Fun, Acc, 1, List).
@@ -709,10 +769,10 @@ point({X,Y}) ->
     {ok, [{x,X},{y,Y}]};
 
 point(List) when is_list(List) ->
-    X = proplists:get_value(x, List, 0),
-		Y = proplists:get_value(y, List, 0),
-		{ok, {X,Y}};
+    X = proplists:get_value(x, List, proplists:get_value(<<"x">>, List)),
+    Y = proplists:get_value(y, List, proplists:get_value(<<"y">>, List)),
+    {ok, {X,Y}};
 
 point(_) ->
-    false.
+    error.
 

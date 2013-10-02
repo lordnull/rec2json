@@ -15,8 +15,7 @@
 -module(r2j_compile).
 
 -export([scan_file/2, scan_string/2]).
--export([simplify_fields/1, export_declaration/1,
-    opt_record_declarations/0, additional_funcs/2]).
+-export([simplify_fields/1, export_declaration/1, additional_funcs/2]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -167,7 +166,10 @@ extract_types([{type, _L1, Type, TypeArgs} | Tail], Acc) ->
             Acc2 = [{Type, Normalised} | Acc],
             extract_types(Tail, Acc2);
         false ->
-            extract_types(Tail, Acc)
+            extract_types(Tail, Acc);
+        MFA ->
+            Acc2 = [MFA | Acc],
+            extract_types(Tail, Acc2)
     end;
 extract_types([{remote_type, _L1, [{atom,_L2,Module},{atom,_L3,Function},Args]} | Tail], Acc) ->
     try [erl_parse:normalise(Abstract) || Abstract <- Args] of
@@ -184,7 +186,12 @@ extract_types([Type | Tail], Acc) ->
 supported_type(Type, []) ->
     Supported = [integer, pos_integer, non_neg_integer, neg_integer, float,
         number, boolean, binary],
-    lists:member(Type, Supported);
+    case lists:member(Type, Supported) of
+        true ->
+            {r2j_type, Type, []};
+        false ->
+            false
+    end;
 
 supported_type(record, _) ->
     % no go way to know if the record is rec2json compiled or not; just have to
@@ -197,85 +204,23 @@ supported_type(_,_) ->
 create_module(RecordName, Fields) ->
     {ok, ModuleDeclaration} = module_declaration(RecordName),
     {ok, ExportDeclaration} = export_declaration(Fields),
-    {ok, OptRecDeclarations} = opt_record_declarations(),
-    %{ok, FromOptRecDeclaration} = from_opt_rec_declaration(),
-    %{ok, ToOptRecDeclaration} = to_opt_rec_declaration(),
     {ok, NewFunctions} = additional_funcs(RecordName, Fields),
-    [ModuleDeclaration, ExportDeclaration] ++ OptRecDeclarations ++
-        NewFunctions.
+    [ModuleDeclaration, ExportDeclaration] ++ NewFunctions.
 
 additional_funcs(RecordName, Fields) ->
     AccessorFuncs = accessor_funcs(Fields),
     {ok, FieldListFunc} = get_field_names_func(Fields),
     {ok, TypeListFunc} = get_field_types_func(Fields),
     {ok, ToJsonA1} = to_json_arity1_func(),
-    {ok, ToJsonA2} = to_json_arity2_func(Fields),
-    {ok, ToJson} = to_json_func(Fields),
-    {ok, ToJsonTransform} = to_json_transform_func(),
+    {ok, ToJsonA2} = to_json_arity2_func(),
     {ok, FromJsonA1} = from_json_arity1_func(RecordName, Fields),
     {ok, FromJsonA2} = from_json_arity2_func(RecordName, Fields),
     {ok, FromJsonA3} = from_json_arity3_func(),
-    {ok, FromJson} = from_json_func(Fields),
     ScrubKeys = scrub_keys_func(Fields),
-    BuildFromOptRecFuncs = build_from_opt_rec_func(),
-    BuildToOptRecFuncs = build_to_opt_rec_func(),
-    GrandFuncList =  AccessorFuncs ++ [FieldListFunc, TypeListFunc, ToJsonA1, ToJsonA2, ToJson,
-        ToJsonTransform, FromJsonA1, FromJsonA2, FromJsonA3,
-        FromJson] ++ ScrubKeys ++ BuildFromOptRecFuncs ++
-        BuildToOptRecFuncs,
+    GrandFuncList =  AccessorFuncs ++ [FieldListFunc, TypeListFunc,
+        ToJsonA1, ToJsonA2, FromJsonA1, FromJsonA2, FromJsonA3]
+        ++ ScrubKeys,
     {ok, GrandFuncList}.
-
-opt_record_declarations() ->
-    {ok, ToJsonOptRec} = to_opt_rec_declaration(),
-    {ok, FromJsonOptRec} = from_opt_rec_declaration(),
-    {ok, [ToJsonOptRec, FromJsonOptRec]}.
-
-from_opt_rec_declaration() ->
-    Str = "-record(from_json_opt, {treat_null = null}).",
-    {ok, Tokens, _Line} = erl_scan:string(Str),
-    erl_parse:parse_form(Tokens).
-
-build_from_opt_rec_func() ->
-    FuncA1 = "build_from_opts(Opts) -> build_from_opts(Opts, #from_json_opt{}).",
-    FuncA2 =
-        "build_from_opts([], Rec) ->"
-        "   Rec;"
-        "build_from_opts([null_is_undefined |Tail], Rec) ->"
-        "   Rec2 = Rec#from_json_opt{treat_null = undefined},"
-        "   build_from_opts(Tail, Rec2);"
-        "build_from_opts([{null_is_undefined, true} | Tail], Rec) ->"
-        "   Rec2 = Rec#from_json_opt{treat_null = undefined},"
-        "   build_from_opts(Tail, Rec2);"
-        "build_from_opts([{null_is_undefined, false} | Tail], Rec) ->"
-        "   Rec2 = Rec#from_json_opt{treat_null = null},"
-        "   build_from_opts(Tail, Rec2).",
-    {ok, FuncA1T, _} = erl_scan:string(FuncA1),
-    {ok, FuncA2T, _} = erl_scan:string(FuncA2),
-    {ok, FuncA1F} = erl_parse:parse_form(FuncA1T),
-    {ok, FuncA2F} = erl_parse:parse_form(FuncA2T),
-    [FuncA1F, FuncA2F].
-
-to_opt_rec_declaration() ->
-    Str = "-record(to_json_opt, {treat_undefined = skip, transforms = []}).",
-    {ok, Tokens, _Line} = erl_scan:string(Str),
-    erl_parse:parse_form(Tokens).
-
-build_to_opt_rec_func() ->
-    FuncA1 =
-        "build_to_opts(Opts) ->"
-        "   build_to_opts(Opts, #to_json_opt{}).",
-    FuncA2 =
-        "build_to_opts([], Rec) ->"
-        "   Transforms = lists:reverse(Rec#to_json_opt.transforms),"
-        "   Rec#to_json_opt{transforms = Transforms};"
-        "build_to_opts([{null_is_undefined} | Tail], Rec) ->"
-        "   Rec2 = Rec#to_json_opt{treat_undefined = null},"
-        "   build_to_opts(Tail, Rec2);"
-        "build_to_opts([Transform | Tail], Rec) ->"
-        "   Transforms1 = [Transform | Rec#to_json_opt.transforms],"
-        "   Rec2 = Rec#to_json_opt{transforms = Transforms1},"
-        "   build_to_opts(Tail, Rec2).",
-    parse_strings([FuncA1, FuncA2]).
 
 parse_strings(Strings) ->
     parse_strings(Strings, []).
@@ -331,18 +276,25 @@ get_field_names_func(Fields) ->
     parse_string(Str).
 
 get_field_types_func(Fields) ->
-    TypeProps = lists:map(fun({FieldName, _Default, Types}) ->
+    TypeProps = lists:map(fun({FieldName, _Default, {Anyness, Types}}) ->
         TypeProp = exportable_types(Types),
-        {FieldName, TypeProp}
+        {FieldName, {Anyness, TypeProp}}
       end, Fields),
       FuncStr = "field_types() -> ~p.",
       Str = lists:flatten(io_lib:format(FuncStr, [TypeProps])),
       parse_string(Str).
 
-exportable_types({any, _}) ->
-    any;
+exportable_types({list, ListDef}) ->
+    Exportable = exportable_types(ListDef),
+    {list, Exportable};
 
-exportable_types({specific, List}) ->
+exportable_types({AtomType, []}) when is_atom(AtomType) ->
+    AtomType;
+
+exportable_types({record, [RecName]}) ->
+    {record, RecName};
+
+exportable_types(List) when is_list(List) ->
     NoUndef = lists:delete(undefined, List),
     % the lists reverse is at the end because the earlier simplify fields
     % reverses the order the types were declared. By reversing it here,
@@ -356,100 +308,21 @@ exportable_types({specific, List}) ->
             [undefined | Cleansed]
     end;
 
-exportable_types({AtomType, []}) when is_atom(AtomType) ->
-    AtomType;
-
-exportable_types({list, ListDef}) ->
-    Exportable = exportable_types(ListDef),
-    {list, Exportable};
-
-exportable_types({record, [RecName]}) ->
-    {record, RecName};
-
 exportable_types(Wut) ->
     Wut.
 
 to_json_arity1_func() ->
-    FunctionStr = "to_json(Struct) -> to_json(Struct, []).",
+    FunctionStr = "to_json(Struct) -> rec2json:to_json(Struct, []).",
     {ok, Tokens, _Line} = erl_scan:string(FunctionStr),
     erl_parse:parse_form(Tokens).
 
-to_json_arity2_func(Fields) ->
-    FieldNamesStr = [ atom_to_list(Fname) || {Fname, _, _} <- Fields ],
-    FieldNamesStr1 = string:join(FieldNamesStr, ","),
+to_json_arity2_func() ->
     FunctionStr =
         "to_json(Struct, Options) when is_tuple(Struct) ->"
-        "    rec2json:to_json(Struct, [~s], Options);"
+        "    rec2json:to_json(Struct, Options);"
         "to_json(Options, Struct) ->"
         "    to_json(Struct, Options).",
-    FunctionStr1 = lists:flatten(io_lib:format(FunctionStr, [FieldNamesStr1])),
-    parse_string(FunctionStr1).
-
-to_json_func(Fields) ->
-    Ending =
-        "to_json(Struct, 1, Acc, Options) ->"
-        "   to_json_transform(Acc, Struct, Options)",
-    OptionTrap =
-        "to_json(Struct, Elem, Acc, Options) when is_list(Options) ->"
-        "   OptRec = build_to_opts(Options),"
-        "   to_json(Struct, Elem, Acc, OptRec)",
-    Looper =
-        "to_json(Struct, ~p = Elem, Acc, Options) ->"
-        "   #to_json_opt{treat_undefined = UndefDo} = Options,"
-        "   Value = element(Elem, Struct),"
-        "   case {Value, UndefDo} of"
-        "       {undefined, skip} ->"
-        "           to_json(Struct, Elem - 1, Acc, Options);"
-        "       {undefined, null} ->"
-        "           to_json(Struct, Elem - 1, [{~s, null} | Acc], Options);"
-        "       {Tuple, _} when is_tuple(Tuple) ->"
-        "           SubRecName = element(1, Tuple),"
-        "           case erlang:function_exported(SubRecName, to_json, 2) of"
-        "               false ->"
-        "                   erlang:error(badarg);"
-        "               true ->"
-        "                   SubJson = SubRecName:to_json(Tuple, Options),"
-        "                   to_json(Struct, Elem - 1, [{~s, SubJson} | Acc], Options)"
-        "           end;"
-        "       _Else ->"
-        "           to_json(Struct, Elem - 1, [{~s, Value} | Acc], Options)"
-        "   end",
-    Clauses = to_json_func(Fields, Looper, 2, []),
-    Clauses1 = [Ending, OptionTrap] ++ Clauses,
-    FunctionStr = string:join(Clauses1, ";") ++ ".",
-    {ok, Tokens, _Line} = erl_scan:string(FunctionStr),
-    erl_parse:parse_form(Tokens).
-
-to_json_func([], _LooperStr, _Elem, Acc) ->
-    lists:reverse(Acc);
-
-to_json_func([{K, _Default, _Types} | Tail], Str, Elem, Acc) ->
-    Str1 = lists:flatten(io_lib:format(Str, [Elem, K, K, K])),
-    to_json_func(Tail, Str, Elem + 1, [Str1 | Acc]).
-
-to_json_transform_func() ->
-    Func =
-        "to_json_transform(Json, Struct, #to_json_opt{transforms = Trans}) ->"
-        "   to_json_transform(Json, Struct, Trans);"
-        "to_json_transform([], _Struct, []) ->"
-        "   [{}];"
-        "to_json_transform(Json, _Struct, []) ->"
-        "   Json;"
-        "to_json_transform(Json, Struct, [Func | Tail]) when is_function(Func) ->"
-        "   Json2 = case erlang:fun_info(Func, arity) of"
-        "       {arity, 1} ->"
-        "           Func(Json);"
-        "       {arity, 2} ->"
-        "           Func(Json, Struct)"
-        "   end,"
-        "   to_json_transform(Json2, Struct, Tail);"
-        "to_json_transform(Json, Struct, [Atom | Tail]) when is_atom(Atom) ->"
-        "   Json2 = proplists:delete(Atom, Json),"
-        "   to_json_transform(Json2, Struct, Tail);"
-        "to_json_transform(Json, Struct, [{_Key, _Value} = Prop| Tail]) ->"
-        "   Json2 = Json ++ [Prop],"
-        "   to_json_transform(Json2, Struct, Tail).",
-    parse_string(Func).
+    parse_string(FunctionStr).
 
 blank_record(RecName, Fields) ->
     Defaults = [printable_default(D) || {_,D,_} <- Fields],
@@ -518,7 +391,7 @@ from_json_arity1_func(RecName, Fields) ->
     FromJsonA1Str =
         "from_json(Json) ->"
         "   Json2 = scrub_keys(Json),"
-        "   from_json(Json2, ~s, [], []).",
+        "   rec2json:from_json(~s, Json2, []).",
     FromJsonA1Str1 = lists:flatten(io_lib:format(FromJsonA1Str, [BlankTuple])),
     {ok, FromJsonA1Tokens, _Line} = erl_scan:string(FromJsonA1Str1),
     erl_parse:parse_form(FromJsonA1Tokens).
@@ -527,84 +400,21 @@ from_json_arity2_func(RecName, Fields) ->
     BlankRec = blank_record(RecName, Fields),
     FromJsonA2Str =
         "from_json(Json, Opts) when is_list(Json), is_list(Opts)->"
-        "   Json2 = scrub_keys(Json),"
-        "   from_json(Json2, ~s, Opts, []);"
+        "   from_json(~s, Json, Opts);"
         "from_json(Struct, Json) when is_tuple(Struct) ->"
-        "    Json2 = scrub_keys(Json),"
-        "    from_json(Json2, Struct, [], []);"
-        "from_json(Json, Opt) when is_record(Opt, from_json_opt) ->"
-        "   from_json(Json, ~s, Opt, []);"
+        "    from_json(Struct, Json, []);"
         "from_json(Json, Struct) ->"
-        "   Json2 = scrub_keys(Json),"
-        "   from_json(Json2, Struct, [], []).",
-    FromJsonA2Str1 = lists:flatten(io_lib:format(FromJsonA2Str, [BlankRec, BlankRec])),
+        "   from_json(Struct, Json, []).",
+    FromJsonA2Str1 = lists:flatten(io_lib:format(FromJsonA2Str, [BlankRec])),
     {ok, FromJsonA2Tokens, _Line} = erl_scan:string(FromJsonA2Str1),
     erl_parse:parse_form(FromJsonA2Tokens).
 
 from_json_arity3_func() ->
     FromJsonA3Str =
         "from_json(Struct, Json, Opts) when is_list(Opts) ->"
-        "    Json2 = scrub_keys(Json),"
-        "    from_json(Json2, Struct, Opts, []);"
+        "    from_json(Json, Opts, Struct);"
         "from_json(Json, Opts, Struct) ->"
         "    Json2 = scrub_keys(Json),"
-        "    from_json(Json2, Struct, Opts, []).",
+        "    rec2json:from_json(Struct, Json2, Opts).",
     {ok, FromJsonA3Tokens, _Line} = erl_scan:string(FromJsonA3Str),
     erl_parse:parse_form(FromJsonA3Tokens).
-
-from_json_func(Fields) ->
-    OptionCatcher =
-        "from_json(Json, Struct, Options, Warns) when is_list(Options) ->"
-        "   Options2 = build_from_opts(Options),"
-        "   from_json(Json, Struct, Options2, Warns)",
-    FinishedFuncStr =
-        "from_json([], Struct, _Options, Warns) ->"
-        "   case Warns of"
-        "       [] ->"
-        "           {ok, Struct};"
-        "       _ ->"
-        "           {ok, Struct, Warns}"
-        "   end",
-    Acc = [FinishedFuncStr, OptionCatcher],
-    {ok, PropFuncs} = from_json_func(Fields, 2, Acc),
-    {ok, PropFuncs}.
-
-from_json_func([], _N, Acc) ->
-    CatchAll =
-        "from_json([_|Tail], Struct, Options, Warns) ->"
-        "   from_json(Tail, Struct, Options, Warns)",
-    Acc2 = lists:append(Acc, [CatchAll]),
-    Func = string:join(Acc2, ";\n") ++ ".",
-    {ok, Tokens, _Line} = erl_scan:string(Func),
-    erl_parse:parse_form(Tokens);
-
-from_json_func([{K, _Default, Types} | Tail], ElemNum, Acc) ->
-    Clause = from_json_type_clause(K, Types, ElemNum),
-    from_json_func(Tail, ElemNum + 1, [Clause | Acc]).
-
-from_json_type_clause(Key, any, ElemNum) ->
-    from_json_type_clause(Key, {any, []}, ElemNum);
-
-from_json_type_clause(Key, {Any, Types}, ElemNum) ->
-    KeyClause = 
-    "from_json([{~s, Val} | Tail], Struct, #from_json_opt{treat_null = NullIs} = Opt, Warns) ->"
-    "   case rec2json:verify_type(Val, ~p, ~s, NullIs, Opt) of"
-    "       {ok, Val1} ->"
-    "           Struct0 = setelement(~p, Struct, Val1),"
-    "           from_json(Tail, Struct0, Opt, Warns);"
-    "       {warn, Val1} ->"
-    "           Struct0 = setelement(~p, Struct, Val1),"
-    "           from_json(Tail, Struct0, Opt, [~s | Warns]);"
-    "       {warn, Val1, SubWarns} ->"
-    "           Struct0 = setelement(~p, Struct, Val1),"
-    "           SubWarns1 = case is_list(hd(SubWarns)) of"
-    "               true ->"
-    "                   [[~s | SW] || SW <- SubWarns];"
-    "               false ->"
-    "                   [[~s, SW] || SW <- SubWarns]"
-    "           end,"
-    "           from_json(Tail, Struct0, Opt, SubWarns1 ++ Warns)"
-    "   end",
-    % TODO make types usable in the string format.
-    TypeStr = Types,
-    lists:flatten(io_lib:format(KeyClause, [Key, TypeStr, Any, ElemNum, ElemNum, Key, ElemNum, Key, Key])).
