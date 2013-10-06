@@ -27,5 +27,3 @@ eunit: clean deps compile
 test: deps compile testclean
 	./rebar eunit skip_deps=true
 
-script: compile
-	./rebar escriptize skip_deps=true
