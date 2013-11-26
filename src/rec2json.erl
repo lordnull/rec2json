@@ -77,14 +77,18 @@ compile_sources([Src | Tail], Inc, Out) ->
 %% parse transform
 %% ---------------------------------------------------------------------------
 
-parse_transform(Forms, _Options) ->
+parse_transform(Forms, Options) ->
+    Params = case proplists:get_value(rec2json, Options) of
+        undefined -> [];
+        P -> P
+    end,
     ModuleName = hd([Mod || {attribute, _Line, module, Mod} <- Forms]),
     MaybeRecords = [R || {attribute, _Line, record, {RecordName, _Fields}} = R <- Forms, ModuleName == RecordName],
     case MaybeRecords of
         [Record] ->
             SimpleFields = r2j_compile:simplify_fields(Record),
-            {ok, AdditionalExports} = r2j_compile:export_declaration(SimpleFields),
-            {ok, Functions} = r2j_compile:additional_funcs(ModuleName, SimpleFields),
+            {ok, AdditionalExports} = r2j_compile:export_declaration(SimpleFields, Params),
+            {ok, Functions} = r2j_compile:additional_funcs(ModuleName, SimpleFields, Params),
             insert_new_bits(Forms, AdditionalExports, Functions);
         _Records ->
             Forms
