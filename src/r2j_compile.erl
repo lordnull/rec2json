@@ -1,11 +1,11 @@
 %% Copyright 2012 Micah Warren
-%% 
+%%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
 %% You may obtain a copy of the License at
-%% 
+%%
 %%   http://www.apache.org/licenses/LICENSE-2.0
-%% 
+%%
 %% Unless required by applicable law or agreed to in writing, software
 %% distributed under the License is distributed on an "AS IS" BASIS,
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,7 +15,7 @@
 -module(r2j_compile).
 
 -export([scan_file/2, scan_string/2]).
--export([simplify_fields/1, export_declaration/1, additional_funcs/2]).
+-export([simplify_fields/1, export_declaration/1, export_declaration/2, additional_funcs/2, additional_funcs/3]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -208,7 +208,14 @@ create_module(RecordName, Fields) ->
     [ModuleDeclaration, ExportDeclaration] ++ NewFunctions.
 
 additional_funcs(RecordName, Fields) ->
-    AccessorFuncs = accessor_funcs(Fields),
+    additional_funcs(RecordName, Fields, []).
+
+additional_funcs(RecordName, Fields, Params) ->
+    GenerateAccessors = proplists:get_value(generate_accessors, Params, true),
+    AccessorFuncs = case GenerateAccessors of
+        true -> accessor_funcs(Fields);
+        false -> []
+    end,
     {ok, FieldListFunc} = get_field_names_func(Fields),
     {ok, TypeListFunc} = get_field_types_func(Fields),
     {ok, ToJsonA1} = to_json_arity1_func(),
@@ -217,7 +224,7 @@ additional_funcs(RecordName, Fields) ->
     {ok, FromJsonA2} = from_json_arity2_func(RecordName, Fields),
     {ok, FromJsonA3} = from_json_arity3_func(),
     ScrubKeys = scrub_keys_func(Fields),
-    GrandFuncList =  AccessorFuncs ++ [FieldListFunc, TypeListFunc,
+    GrandFuncList = AccessorFuncs ++ [FieldListFunc, TypeListFunc,
         ToJsonA1, ToJsonA2, FromJsonA1, FromJsonA2, FromJsonA3]
         ++ ScrubKeys,
     {ok, GrandFuncList}.
@@ -242,9 +249,15 @@ module_declaration(Name) ->
     erl_parse:parse_form(Tokens).
 
 export_declaration(Fields) ->
-    FieldDecs = export_declarations(Fields, []),
+    export_declaration(Fields, []).
+export_declaration(Fields, Params) ->
+    GenerateAccessors = proplists:get_value(generate_accessors, Params, true),
+    FieldDecs = case GenerateAccessors of
+        true -> export_declarations(Fields, []);
+        false -> []
+    end,
     Decs = ["field_names/0", "field_types/0", "to_json/1", "to_json/2",
-        "from_json/1", "from_json/2", "from_json/3" | FieldDecs],
+        "from_json/1", "from_json/2", "from_json/3"] ++ FieldDecs,
     Decs1 = string:join(Decs, ","),
     String = lists:flatten(io_lib:format("-export([~s]).", [Decs1])),
     {ok, Tokens, _Line} = erl_scan:string(String),
