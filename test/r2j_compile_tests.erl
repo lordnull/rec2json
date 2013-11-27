@@ -53,6 +53,18 @@ compile_strings_test_() -> [
         Keyed = lists:zip(Seq, Types),
         Keyed2 = [{integer_to_list(N), V} || {N, V} <- Keyed],
         types_gen(Keyed2)
+    end},
+
+    {"has an accessor function", fun() ->
+        r2j_compile:scan_string("-record(cst5, {f}).", []),
+        code:load_file(cst5),
+        ?assert(erlang:function_exported(cst5, f, 1))
+    end},
+
+    {"no accessor when opted out", fun() ->
+        r2j_compile:scan_string("-record(cst6, {f}).", [{generate_accessors, false}]),
+        code:load_file(cst6),
+        ?assertNot(erlang:function_exported(cst6, f, 1))
     end}
 
     ].
