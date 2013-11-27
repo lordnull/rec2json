@@ -3,20 +3,15 @@
 
 ## Overview
 
-Rec2json takes standard erlang source or include files, scans them for
-record definitions, and generates a module for each record to convert that
-record to and from the
+Rec2json is a parse transform that takes a module which defines a record of the
+same name and adds to_json, from_json, and introspection functions. The to_json
+and from_json convert to and from the 
 [proposed erlang json standard](http://www.erlang.org/eeps/eep-0018.html)
-
-Alternatively, rec2json includes a parse_transform that allows a module which
-defines (or includes the definition of) a record of the same name to export
-the json conversion and record field accessor functions.
 
 ## Features
 
 * Resulting modules can be used as parameterized modules or pure erlang.
-* Includes a parse transform
-* Resulting escript can create modules from record definition only.
+* Uses a parse transform.
 * Limited type checking on json -> record conversion.
 * Atom 'undefined' fields in records optionally skipped or set to null.
 * Atom 'null' in json optionally converted to 'undefined'.
@@ -26,6 +21,8 @@ the json conversion and record field accessor functions.
 records that have been compiled using rec2json.
 * Generated module has accessor functions for fields and field_names for
 list of fields in the record.
+* Generated module exports functions to examine structure and types for a
+record.
 
 ## Compiling
 
@@ -37,46 +34,17 @@ To run tests:
 
     make test
 
-## Parse_transform
+## Use
 
-Rec2json can apply a parse_transform to a module that includes a record of the
-same name to add the to_json/N and from_json/N functions, as well as the field
-accessors. Simpley add the following line near the module attribute:
+The rec2json parse_transform looks for a record with the same name as the
+module. It doesn't matter whether the record was defined directly in the
+module or in an include file.
 
     -compile([{parse_transform, rec2json}]).
 
-When using only the parse transform, you do not need to have the rec2json script
-available. You will still need rec2json in the release for your application.
+The transformed modules depend on the rec2json application's modules.
 
-## Compiling Records
-
-Fully implemented is the scan_file and scan_string functions.
-
-    rec2json_compile:scan_file("src_file.hrl", []).
-    rec2json_compile:scan_string("-record(a, {b = 1 :: integer()}).", []).
-    rec2json_compile:scan_string("-record(a, {b :: #b{}}). \n -record(b, {c = 1 :: integer()}).").
-
-The Options (empty list at the end) are:
-
-* {imports_dir, "path/to/imports"}
-* {output_dir, "path/to/ebin"}
-
-Multple files can be scanned by either using wildcards or listing them:
-
-    rec2json_compile:scan_files("include/*.hrl", Options).
-    rec2json_compile:scan_files(["rec.hrl", "other_rec.hrl"], Options).
-
-To generate a stand-alone script for compiling:
-
-    make script
-
-This will create a "rec2json" script that can be run:
-
-    ./rec2json -src=include/*.hrl -dest=ebin -include=include
-
-## Use
-
-The records are unchanged and can be used normally. The module to convert
+The records are unchanged and can be used normally.
 the record to and from json has the same name as the record. A record can
 also be used as a paramterized module, making it simple to use with the
 [erlydtl Django templates](https://github.com/evanmiller/erlydtl) project.
