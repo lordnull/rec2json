@@ -1,11 +1,11 @@
 %% Copyright 2012 Micah Warren
-%% 
+%%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
 %% You may obtain a copy of the License at
-%% 
+%%
 %%   http://www.apache.org/licenses/LICENSE-2.0
-%% 
+%%
 %% Unless required by applicable law or agreed to in writing, software
 %% distributed under the License is distributed on an "AS IS" BASIS,
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,7 +15,7 @@
 -module(r2j_compile).
 
 -export([scan_file/2, scan_string/2]).
--export([simplify_fields/1, export_declaration/1, additional_funcs/2]).
+-export([simplify_fields/1, export_declaration/1, export_declaration/2, additional_funcs/3]).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -30,7 +30,7 @@ scan_file(Hrl, Opts) ->
     Imports = proplists:get_value(imports_dir, Opts, []),
     {ok, Handle} = epp:open(Hrl, Imports, []),
     {ok, Forms} = read_epp_forms(Handle),
-    Modules = analyze_forms(Forms),
+    Modules = analyze_forms(Forms, Opts),
     output(Modules, proplists:get_value(output_dir, Opts, ".")).
 
 read_epp_forms(Handle) ->
@@ -49,7 +49,7 @@ scan_string(Str, Opts) ->
     {ok, Tokens, _Lines} = erl_scan:string(Str),
     LineTokens = split_tokens_by_dots(Tokens),
     Forms = parse_forms(LineTokens),
-    Modules = analyze_forms(Forms),
+    Modules = analyze_forms(Forms, Opts),
     output(Modules, proplists:get_value(output_dir, Opts, ".")).
 
 split_tokens_by_dots(Tokens) ->
@@ -85,25 +85,25 @@ output([Module | Tail], OutputDir) ->
     file:write_file(File, Bin),
     output(Tail, OutputDir).
 
-analyze_forms(Forms) ->
-    analyze_forms(Forms, []).
+analyze_forms(Forms, Params) ->
+    analyze_forms(Forms, [], Params).
 
-analyze_forms([], Acc) ->
+analyze_forms([], Acc, _Params) ->
     lists:reverse(Acc);
 
-analyze_forms([Form | Forms], Acc) ->
+analyze_forms([Form | Forms], Acc, Params) ->
     case erl_syntax:type(Form) of
         attribute ->
             case erl_syntax_lib:analyze_attribute(Form) of
                 {record, {RecordName, _RecordFields}} ->
                     SimpleFields = simplify_fields(Form),
-                    Mod = create_module(RecordName, SimpleFields),
-                    analyze_forms(Forms, [Mod | Acc]);
+                    Mod = create_module(RecordName, SimpleFields, Params),
+                    analyze_forms(Forms, [Mod | Acc], Params);
                 _ ->
-                    analyze_forms(Forms, Acc)
+                    analyze_forms(Forms, Acc, Params)
             end;
         _ ->
-            analyze_forms(Forms, Acc)
+            analyze_forms(Forms, Acc, Params)
     end.
 
 simplify_fields({attribute, _Line, record, {_RecName, Fields}}) ->
@@ -201,14 +201,21 @@ supported_type(record, _) ->
 supported_type(_,_) ->
     false.
 
-create_module(RecordName, Fields) ->
+create_module(RecordName, Fields, Params) ->
     {ok, ModuleDeclaration} = module_declaration(RecordName),
-    {ok, ExportDeclaration} = export_declaration(Fields),
-    {ok, NewFunctions} = additional_funcs(RecordName, Fields),
+    {ok, ExportDeclaration} = export_declaration(Fields, Params),
+    {ok, NewFunctions} = additional_funcs(RecordName, Fields, Params),
     [ModuleDeclaration, ExportDeclaration] ++ NewFunctions.
 
-additional_funcs(RecordName, Fields) ->
-    AccessorFuncs = accessor_funcs(Fields),
+%additional_funcs(RecordName, Fields) ->
+%    additional_funcs(RecordName, Fields, []).
+
+additional_funcs(RecordName, Fields, Params) ->
+    GenerateAccessors = proplists:get_value(generate_accessors, Params, true),
+    AccessorFuncs = case GenerateAccessors of
+        true -> accessor_funcs(Fields);
+        false -> []
+    end,
     {ok, FieldListFunc} = get_field_names_func(Fields),
     {ok, TypeListFunc} = get_field_types_func(Fields),
     {ok, ToJsonA1} = to_json_arity1_func(),
@@ -217,7 +224,7 @@ additional_funcs(RecordName, Fields) ->
     {ok, FromJsonA2} = from_json_arity2_func(RecordName, Fields),
     {ok, FromJsonA3} = from_json_arity3_func(),
     ScrubKeys = scrub_keys_func(Fields),
-    GrandFuncList =  AccessorFuncs ++ [FieldListFunc, TypeListFunc,
+    GrandFuncList = AccessorFuncs ++ [FieldListFunc, TypeListFunc,
         ToJsonA1, ToJsonA2, FromJsonA1, FromJsonA2, FromJsonA3]
         ++ ScrubKeys,
     {ok, GrandFuncList}.
@@ -242,9 +249,15 @@ module_declaration(Name) ->
     erl_parse:parse_form(Tokens).
 
 export_declaration(Fields) ->
-    FieldDecs = export_declarations(Fields, []),
+    export_declaration(Fields, []).
+export_declaration(Fields, Params) ->
+    GenerateAccessors = proplists:get_value(generate_accessors, Params, true),
+    FieldDecs = case GenerateAccessors of
+        true -> export_declarations(Fields, []);
+        false -> []
+    end,
     Decs = ["field_names/0", "field_types/0", "to_json/1", "to_json/2",
-        "from_json/1", "from_json/2", "from_json/3" | FieldDecs],
+        "from_json/1", "from_json/2", "from_json/3"] ++ FieldDecs,
     Decs1 = string:join(Decs, ","),
     String = lists:flatten(io_lib:format("-export([~s]).", [Decs1])),
     {ok, Tokens, _Line} = erl_scan:string(String),

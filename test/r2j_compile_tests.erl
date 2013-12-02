@@ -53,6 +53,18 @@ compile_strings_test_() -> [
         Keyed = lists:zip(Seq, Types),
         Keyed2 = [{integer_to_list(N), V} || {N, V} <- Keyed],
         types_gen(Keyed2)
+    end},
+
+    {"has an accessor function", fun() ->
+        r2j_compile:scan_string("-record(cst5, {f}).", []),
+        code:load_file(cst5),
+        ?assert(erlang:function_exported(cst5, f, 1))
+    end},
+
+    {"no accessor when opted out", fun() ->
+        r2j_compile:scan_string("-record(cst6, {f}).", [{generate_accessors, false}]),
+        code:load_file(cst6),
+        ?assertNot(erlang:function_exported(cst6, f, 1))
     end}
 
     ].
@@ -109,6 +121,25 @@ parse_transform_test_() ->
 
         {"has to_json/1", fun() ->
             ?assert(erlang:function_exported(test_person, to_json, 1))
+        end},
+
+        {"has accessor", fun() ->
+            ?assert(erlang:function_exported(test_person, name, 1))
+        end},
+
+        {"compile and load with no accessors", fun() ->
+            {ok, _Module, Binary} = compile:file("../test/test_person", [binary, {rec2json, [{generate_accessors, false}]}]),
+            Got = code:load_binary(test_person, "../test/test_no_accessor", Binary),
+            ?assertEqual({module, test_person}, Got)
+        end},
+
+        {"no accessor compile doesn't have accessor", fun() ->
+            ?assertNot(erlang:function_exported(test_person, name, 1))
+        end},
+
+        {"no accessor still has to and from json", fun() ->
+            ?assert(erlang:function_exported(test_person, to_json, 1)),
+            ?assert(erlang:function_exported(test_person, from_json, 1))
         end}
 
     ] end}.

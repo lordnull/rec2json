@@ -21,6 +21,7 @@ and from_json convert to and from the
 records that have been compiled using rec2json.
 * Generated module has accessor functions for fields and field_names for
 list of fields in the record.
+* Above feature can be surpressed.
 * Generated module exports functions to examine structure and types for a
 record.
 
@@ -48,6 +49,21 @@ The records are unchanged and can be used normally.
 the record to and from json has the same name as the record. A record can
 also be used as a paramterized module, making it simple to use with the
 [erlydtl Django templates](https://github.com/evanmiller/erlydtl) project.
+
+Options are passed to the rec2json parse transform through compile options.
+The parse transform checks for the key 'rec2json' in the compile options.
+The value is expected to be a proplist. Options are:
+
+<table>
+  <tr>
+    <th>Option</th> <th>Default: Values</th> <th>Description</th>
+  </tr>
+  <tr>
+    <td>generate_accessors</td> <td>true : boolean()</td> <td>If set to
+true, functions for accessing the fields of a record are exported and
+created. If set to false, they are not created nor exported.</td>
+  </tr>
+</table>
 
 The given examples use the following record and record defintion:
 
