@@ -98,6 +98,8 @@ to_json(Tuple, Options) when is_tuple(Tuple) ->
                     {UndefIs, Acc};
                 {ok, undefined} when UndefIs =:= null ->
                     {UndefIs, [{Name, null} | Acc]};
+                {ok, NewVal} when is_boolean(NewVal) ->
+                    {UndefIs, [{Name, NewVal} | Acc]};
                 {ok, NewVal} when is_atom(NewVal) ->
                     {UndefIs, [{Name, list_to_binary(atom_to_list(NewVal))} | Acc]};
                 {ok, NewVal} ->

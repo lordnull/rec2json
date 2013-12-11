@@ -236,6 +236,18 @@ feature_test_() ->
           ?assertEqual([{field, <<"an atom">>}], Record:to_json())
         end},
 
+        {"To json, true does not become binary", fun() ->
+          ?debugFmt("~p", [proplists:get_value(r2j_compile, code:all_loaded())]),
+          Record = #included{field = true},
+          ?assertEqual([{field, true}], Record:to_json())
+        end},
+
+        {"To json, false does not become binary", fun() ->
+          ?debugFmt("~p", [proplists:get_value(r2j_compile, code:all_loaded())]),
+          Record = #included{field = false},
+          ?assertEqual([{field, false}], Record:to_json())
+        end},
+
         {"To json, empty lists stay lists", fun() ->
           Record = #included{field = []},
           ?assertEqual([{field, []}], Record:to_json())
