@@ -63,6 +63,13 @@ The value is expected to be a proplist. Options are:
 true, functions for accessing the fields of a record are exported and
 created. If set to false, they are not created nor exported.</td>
   </tr>
+	<tr>
+		<td>generate_setters</td> <td>true : boolean()</td> <td> If set to
+true, functions for setting the fields of a record are created and
+exported. These are of the form Field(NewVal, Record) or
+Record:Field(NewVal). If set to false, they are not created nor exported.
+		</td>
+	</tr>
 </table>
 
 The given examples use the following record and record defintion:
