@@ -216,6 +216,11 @@ additional_funcs(RecordName, Fields, Params) ->
         true -> accessor_funcs(Fields);
         false -> []
     end,
+		GenerateSetters = proplists:get_value(generate_setters, Params, true),
+		SetterFuncs = case GenerateSetters of
+				true -> setter_funcs(Fields);
+				false -> []
+		end,
     {ok, FieldListFunc} = get_field_names_func(Fields),
     {ok, TypeListFunc} = get_field_types_func(Fields),
     {ok, ToJsonA1} = to_json_arity1_func(),
@@ -224,8 +229,10 @@ additional_funcs(RecordName, Fields, Params) ->
     {ok, FromJsonA2} = from_json_arity2_func(RecordName, Fields),
     {ok, FromJsonA3} = from_json_arity3_func(),
     ScrubKeys = scrub_keys_func(Fields),
-    GrandFuncList = AccessorFuncs ++ [FieldListFunc, TypeListFunc,
-        ToJsonA1, ToJsonA2, FromJsonA1, FromJsonA2, FromJsonA3]
+    GrandFuncList = AccessorFuncs ++ SetterFuncs ++
+				[FieldListFunc, TypeListFunc,
+        ToJsonA1, ToJsonA2,
+				FromJsonA1, FromJsonA2, FromJsonA3]
         ++ ScrubKeys,
     {ok, GrandFuncList}.
 
@@ -256,8 +263,14 @@ export_declaration(Fields, Params) ->
         true -> export_declarations(Fields, []);
         false -> []
     end,
+		GenerateSetters = proplists:get_value(generate_setters, Params, true),
+		SetFieldDecs = case GenerateSetters of
+				true -> export_setters(Fields, []);
+				false -> []
+		end,
     Decs = ["field_names/0", "field_types/0", "to_json/1", "to_json/2",
-        "from_json/1", "from_json/2", "from_json/3"] ++ FieldDecs,
+        "from_json/1", "from_json/2", "from_json/3"] ++ FieldDecs ++
+				SetFieldDecs,
     Decs1 = string:join(Decs, ","),
     String = lists:flatten(io_lib:format("-export([~s]).", [Decs1])),
     {ok, Tokens, _Line} = erl_scan:string(String),
@@ -269,6 +282,13 @@ export_declarations([], Acc) ->
 export_declarations([{K, _Default, _Types} | Tail], Acc) ->
     D = lists:flatten(io_lib:format("~p/1", [K])),
     export_declarations(Tail, [D | Acc]).
+
+export_setters([], Acc) ->
+		lists:reverse(Acc);
+
+export_setters([{K, _Default, _Types} | Tail], Acc) ->
+		D = lists:flatten(io_lib:format("~p/2", [K])),
+		export_setters(Tail, [D | Acc]).
 
 accessor_funcs(Fields) ->
     accessor_funcs(Fields, 2, []).
@@ -282,6 +302,19 @@ accessor_funcs([{K, _Default, _Type} | Tail], N, Acc) ->
     {ok, Tokens, _Line} = erl_scan:string(FunctionStr1),
     {ok, Forms} = erl_parse:parse_form(Tokens),
     accessor_funcs(Tail, N + 1, [Forms | Acc]).
+
+setter_funcs(Fields) ->
+		setter_funcs(Fields, 2, []).
+
+setter_funcs([], _Num, Acc) ->
+		lists:reverse(Acc);
+
+setter_funcs([{K, _Default, _Type} | Tail], N, Acc) ->
+		FunctionStr = "~p(NewVal, Struct) -> setelement(~p, Struct, NewVal).",
+		FuncStr1 = lists:flatten(io_lib:format(FunctionStr, [K, N])),
+		{ok, Tokens, _Line} = erl_scan:string(FuncStr1),
+		{ok, Forms} = erl_parse:parse_form(Tokens),
+		setter_funcs(Tail, N + 1, [Forms | Acc]).
 
 get_field_names_func(Fields) ->
     Names = [F || {F, _, _} <- Fields],

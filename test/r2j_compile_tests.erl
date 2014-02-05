@@ -127,6 +127,10 @@ parse_transform_test_() ->
             ?assert(erlang:function_exported(test_person, name, 1))
         end},
 
+				{"has getters", fun() ->
+						?assert(erlang:function_exported(test_person, name, 2))
+				end},
+
         {"compile and load with no accessors", fun() ->
             {ok, _Module, Binary} = compile:file("../test/test_person", [binary, {rec2json, [{generate_accessors, false}]}]),
             Got = code:load_binary(test_person, "../test/test_no_accessor", Binary),
@@ -140,7 +144,55 @@ parse_transform_test_() ->
         {"no accessor still has to and from json", fun() ->
             ?assert(erlang:function_exported(test_person, to_json, 1)),
             ?assert(erlang:function_exported(test_person, from_json, 1))
-        end}
+        end},
+
+				{"has getters", fun() ->
+					?assert(erlang:function_exported(test_person, name, 2))
+				end},
+
+				{"compile and load with no settors", fun() ->
+            {ok, _Module, Binary} = compile:file("../test/test_person", [binary, {rec2json, [{generate_setters, false}]}]),
+            Got = code:load_binary(test_person, "../test/test_no_setters", Binary),
+            ?assertEqual({module, test_person}, Got)
+				end},
+
+				{"has no setters", fun() ->
+						?assertNot(erlang:function_exported(test_person, name, 2))
+				end},
+
+				{"no setters has accessor", fun() ->
+						?assert(erlang:function_exported(test_person, name, 1))
+				end},
+
+				{"no setters has to/from json", fun() ->
+						?assert(erlang:function_exported(test_person, to_json, 1)),
+						?assert(erlang:function_exported(test_person, from_json, 1))
+				end},
+
+				{"compile with no accessors or setters", fun() ->
+            {ok, _Module, Binary} = compile:file("../test/test_person", [
+								binary,
+								{rec2json, [
+										{generate_setters, false},
+										{generate_accessors, false}
+								]}
+						]),
+            Got = code:load_binary(test_person, "../test/test_no_getset", Binary),
+            ?assertEqual({module, test_person}, Got)
+				end},
+
+				{"has no setters", fun() ->
+						?assertNot(erlang:function_exported(test_person, name, 1))
+				end},
+
+				{"has no getter", fun() ->
+						?assertNot(erlang:function_exported(test_person, name, 2))
+				end},
+
+				{"has to/from json", fun() ->
+						?assert(erlang:function_exported(test_person, to_json, 1)),
+						?assert(erlang:function_exported(test_person, from_json, 1))
+				end}
 
     ] end}.
 
@@ -391,6 +443,19 @@ feature_test_() ->
             end,
             lists:map(Test, NameAndN)
         end},
+
+				{"setter functions", fun() ->
+						Record = #feature{},
+						Fields = record_info(fields, feature),
+						NameAndN = lists:zip(Fields, lists:seq(2, length(Fields) + 1)),
+						Test = fun({Setter, Nth}) ->
+								R1 = Record:Setter(Nth),
+								?assertEqual(Nth, R1:Setter()),
+								R2 = R1:Setter(goober),
+								?assertEqual(goober, R2:Setter())
+						end,
+						lists:map(Test, NameAndN)
+				end},
 
         {"Field list function", fun() ->
             Fields = record_info(fields, feature),
