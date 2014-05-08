@@ -385,13 +385,59 @@ printable_default({call, _L1, ModFunc, Args}) ->
 printable_default(undefined) ->
     undefined;
 
+printable_default({record, _L1, RecordName, FieldAssignments}) ->
+    PrintableFieldsList = lists:map(fun({record_field, _L2, {atom, _L3, FieldName}, FieldValue}) ->
+			PrintableVal = printable_default(FieldValue),
+			io_lib:format("~p = ~p", [FieldName, PrintableVal])
+		end, FieldAssignments),
+    PrintableFields = insert_commas(PrintableFieldsList),
+		io_lib:format("#~p{~p}", [RecordName, PrintableFields]);
+
+printable_default({tuple, _L1, ElementList}) ->
+    PrintableElementList = lists:map(fun(Elem) ->
+			printable_default(Elem)
+		end, ElementList),
+		PrintableElements = insert_commas(PrintableElementList),
+		io_lib:format("{~p}", [PrintableElements]);
+
+printable_default({cons, _, _, _} = Cons) ->
+    printable_cons(Cons);
+
 printable_default(Abstract) ->
+    %?log("Abstract printable default: ~p", [Abstract]),
     erl_parse:normalise(Abstract).
 
 printable_modfunc({remote, _, {atom, _, Mod}, {atom, _, Func}}) ->
     io_lib:format("~p:~p", [Mod, Func]);
 printable_modfunc({atom, _, Func}) ->
     io_lib:format("~p", [Func]).
+
+printable_cons({cons, _L1, Head, {nil, _L2}}) ->
+    io_lib:format("[~p]", [printable_default(Head)]);
+
+printable_cons({cons, _L1, Head, {cons, _, _, _} = Tail}) ->
+    TailList = printable_cons(Tail, []),
+    io_lib:format("[~p, ~p]", [printable_default(Head), TailList]);
+
+printable_cons({cons, _L1, Head, Tail}) ->
+    io_lib:format("[~p | ~p]", [printable_default(Head), printable_default(Tail)]).
+
+printable_cons({nil, _L1}, Acc) ->
+    PrintingList = lists:map(fun(Raw) ->
+		    printable_default(Raw)
+		end, lists:reverse(Acc)),
+		insert_commas(PrintingList);
+
+printable_cons({cons, _L1, Head, Tail}, Acc) ->
+    printable_cons(Tail, [Head | Acc]);
+
+printable_cons(Tail, Acc) ->
+    PrintTail = printable_default(Tail),
+		PrintHeadList = lists:map(fun(Raw) ->
+		    printable_default(Raw)
+		end, lists:reverse(Acc)),
+		PrintHead = insert_commas(PrintHeadList),
+		io_lib:format("~p | ~p", [PrintHead, PrintTail]).
 
 insert_commas(List) ->
     insert_commas(List, []).
