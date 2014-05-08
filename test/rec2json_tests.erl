@@ -4,9 +4,14 @@
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
+-record(sub_rec, {
+	f
+}).
+
 -record(rec2json_tests, {
 	typed_field = {1} :: rec2json_tests:int_tuple(),
-	untyped_field = 3
+	untyped_field = 3,
+	missing_type = undefined :: nomod:nofun()
 }).
 
 -type int_tuple() :: any().
@@ -27,7 +32,8 @@ feature_test_() -> [
 		{"Has correct type info", fun() ->
 			Types = ?MODULE:field_types(),
 			?assertEqual({specific, [{?MODULE, int_tuple, []}]}, proplists:get_value(typed_field, Types)),
-			?assertEqual({any, []}, proplists:get_value(untyped_field, Types))
+			?assertEqual({any, []}, proplists:get_value(untyped_field, Types)),
+			?assertEqual({specific, [{nomod, nofun, []}]}, proplists:get_value(missing_type, Types))
 		end},
 
 		{"does to_json conversion correctly", fun() ->
