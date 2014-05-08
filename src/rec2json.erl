@@ -32,11 +32,15 @@
 %% parse transform
 %% ---------------------------------------------------------------------------
 
-parse_transform(Forms, Options) ->
+parse_transform(RawForms, Options) ->
     Params = case proplists:get_value(rec2json, Options) of
         undefined -> [];
         P -> P
     end,
+		%% always kinda icky to use an undocumented function.
+		%% however, without this, the abstract record forms passed in lack the
+		%% type information needed for user defined types to work properly.
+		Forms = epp:restore_typed_record_fields(RawForms),
     ModuleName = hd([Mod || {attribute, _Line, module, Mod} <- Forms]),
     MaybeRecords = [R || {attribute, _Line, record, {RecordName, _Fields}} = R <- Forms, ModuleName == RecordName],
     case MaybeRecords of

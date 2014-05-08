@@ -3,9 +3,9 @@
 
 ## Overview
 
-Rec2json is a parse transform that takes a module which defines a record of the
-same name and adds to_json, from_json, and introspection functions. The to_json
-and from_json convert to and from the 
+Rec2json is a parse transform that takes a module which defines a record of 
+the same name and adds to_json, from_json, and introspection functions. The 
+to_json and from_json convert to and from the 
 [proposed erlang json standard](http://www.erlang.org/eeps/eep-0018.html)
 
 ## Features
@@ -13,6 +13,7 @@ and from_json convert to and from the
 * Resulting modules can be used as parameterized modules or pure erlang.
 * Uses a parse transform.
 * Limited type checking on json -> record conversion.
+* Limited type checking can include user defined types.
 * Atom 'undefined' fields in records optionally skipped or set to null.
 * Atom 'null' in json optionally converted to 'undefined'.
 * Post processing options on record -> json convertion.
@@ -45,9 +46,8 @@ module or in an include file.
 
 The transformed modules depend on the rec2json application's modules.
 
-The records are unchanged and can be used normally.
-the record to and from json has the same name as the record. A record can
-also be used as a paramterized module, making it simple to use with the
+The records are unchanged and can be used normally. A record can also be
+used as a paramterized module, making it simple to use with the
 [erlydtl Django templates](https://github.com/evanmiller/erlydtl) project.
 
 Options are passed to the rec2json parse transform through compile options.
@@ -199,18 +199,18 @@ or rebar.config precompile hook).
 
 ## Type Checking and Converstion
 
-Type conversion attempts to be as transparent and intuitive as possible. There
-are some types that json does not represent directly, and some types that have
-additional checking implemented.
+Type conversion attempts to be as transparent and intuitive as possible.
+There are some types that json does not represent directly, and some types
+that have additional checking implemented.
 
 Record fields that have atoms as types will have binary values in the json
-checked.  If the atom converted to the binary is equal to the json value, the
+checked. If the atom converted to the binary is equal to the json value, the
 atom value is put into the record. When converting a record to json, atom
 values will be converted to binaries to conform to the erlang spec.
 
-Lists have their types checked. If there is an invalid type, the invalid type
-is placed in the list, but the warning message has the index of the invalid type
-placed in the warning path list. For example:
+Lists have their types checked. If there is an invalid type, the invalid
+type is placed in the list, but the warning message has the index of the
+invalid type placed in the warning path list. For example:
 
 ```erlang
 -record(list_holder, {
@@ -247,9 +247,9 @@ type_mismatch() ->
 If a record field is not typed, or has the type "any()", no warning is ever
 emitted for that field.
 
-User defined types are not checked. During record compile, any unrecognized
-types are skipped. The result is any record field with only user defined types
-is treated as having the type 'any()' when converting from json.
+Type checking comes in two flavors: built-in, and user defined.
+
+### Built-in types
 
 Currently defined types checked:
 
@@ -265,6 +265,47 @@ Currently defined types checked:
 * #record{} when record has record:from_json/2 exported
 * atom (note it is not atom())
 * null when converting to undefined or back
+
+### User defined types
+
+A user defined type is the same as an external type. When going to or from
+json, rec2json will check to see if there is a translation function
+matching the module and type of the type given. A translation function
+should have an arity 1 greater than the type has parameters. The function
+should either return `{ok, NewVal}` or `error`.
+
+For example, given the module:
+
+```erlang
+-module(type_example).
+-compile([{parse_transform, rec2json}]).
+
+-record(type_example, {
+	some_field :: module:function(arg1, arg2),
+	xy = {0, 0} :: type_example:point()
+}).
+
+-export([point/1]).
+
+point({X,Y}) when is_number(X), is_number(Y) ->
+	{ok, [X,Y]};
+
+point([X, Y]) when is_number(X), is_number(Y) ->
+	{ok, {X, Y}};
+
+point(_) ->
+	error.
+```
+
+When using to_json or from_json, rec2json will check to see if `module`
+exports a function named `function` with arity 3. If it exists, rec2json
+will call the function with the args listed in the type, and the current
+value of the field (either from the record or from the json) prepended to
+the arguments.
+
+When used in `from_json`, returns `error`, and all other types have been
+tested, `{ok, Rec, Warnings}` is returned. When used in `to_json`, an
+error is thrown.
 
 ## Contributing
 

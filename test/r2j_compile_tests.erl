@@ -65,7 +65,20 @@ compile_strings_test_() -> [
         r2j_compile:scan_string("-record(cst6, {f}).", [{generate_accessors, false}]),
         code:load_file(cst6),
         ?assertNot(erlang:function_exported(cst6, f, 1))
-    end}
+    end},
+
+    {"record with various defaults defined", 
+			lists:map(fun(DefaultStr) ->
+				{DefaultStr, fun() ->
+					Str = "-record(cst7, { f = " ++ DefaultStr ++ " }).",
+					r2j_compile:scan_string(Str, [])
+				end}
+			end, ["1", "{1}", "\"string\"", "atom", "mod:func()", "mod:func(1)",
+				"[1, 2, 3]", "#record_name{}", "#record_name{field_name = 1}",
+				"{1, #record_name{}}", "[#record_name{}, 1, \"string\"]",
+				"mod:func(#record_name{field_name = 1})",
+				"#record_name{field_name = #sub_rec{}}", "[a|b]"])
+		}
 
     ].
 
