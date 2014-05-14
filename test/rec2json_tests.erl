@@ -11,7 +11,8 @@
 -record(rec2json_tests, {
 	typed_field = {1} :: rec2json_tests:int_tuple(),
 	untyped_field = 3,
-	missing_type = undefined :: nomod:nofun()
+	missing_type = undefined :: nomod:nofun(),
+	float_field = 1.0 :: float()
 }).
 
 -type int_tuple() :: any().
@@ -38,7 +39,7 @@ feature_test_() -> [
 
 		{"does to_json conversion correctly", fun() ->
 			Rec = #rec2json_tests{typed_field = {2, 3, 4}, untyped_field = <<"hi">>},
-			Expected = [{typed_field, [2, 3, 4]}, {untyped_field, <<"hi">>}],
+			Expected = [{typed_field, [2, 3, 4]}, {untyped_field, <<"hi">>}, {float_field, 1.0}],
 			Got = ?MODULE:to_json(Rec),
 			?assertEqual(Expected, Got)
 		end},
@@ -48,6 +49,15 @@ feature_test_() -> [
 			Expected = #rec2json_tests{typed_field = {4, 3, 2}, untyped_field = <<"bye">>},
 			Got = ?MODULE:from_json(Json),
 			?assertEqual({ok, Expected}, Got)
+		end},
+
+		{"can to_json with types loads needed module", fun() ->
+			code:delete(r2j_type),
+			code:purge(r2j_type),
+			false = code:is_loaded(r2j_type),
+    	Rec = #?MODULE{},
+			Got = Rec:to_json(),
+			?assertEqual(1.0, proplists:get_value(float_field, Got))
 		end}
 
 	].
