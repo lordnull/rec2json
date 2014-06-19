@@ -48,12 +48,12 @@ parse_transform(RawForms, Options) ->
             SimpleFields = r2j_compile:simplify_fields(Record),
             {ok, AdditionalExports} = r2j_compile:export_declaration(SimpleFields, Params),
             {ok, Functions} = r2j_compile:additional_funcs(ModuleName, SimpleFields, Params),
-            insert_new_bits(Forms, AdditionalExports, Functions);
+            insert_new_bits(Forms, AdditionalExports, Functions, Params);
         _Records ->
             Forms
     end.
 
-insert_new_bits(Forms, Exports, Functions) ->
+insert_new_bits(Forms, AllNewExports, AllNewFunctions, Params) ->
     EofSplit = fun
         ({eof, _}) -> false;
         (_) -> true
@@ -72,8 +72,36 @@ insert_new_bits(Forms, Exports, Functions) ->
     end,
     {NoEof, Eof} = lists:splitwith(EofSplit, Forms),
     {UpToFunctions, OrigFunctions} = lists:splitwith(FunctionsSplit, NoEof),
-    {UpToExport, BetweenExportAndFunctions} = lists:splitwith(ExportSplit, UpToFunctions),
-    UpToExport ++ [Exports] ++ BetweenExportAndFunctions ++ Functions ++ OrigFunctions ++ Eof.
+    {UpToExport, ExportAndFunctions} = lists:splitwith(ExportSplit, UpToFunctions),
+		{Exports, Functions} = case proplists:get_value(careful, Params, true) of
+			false ->
+				{AllNewExports, AllNewFunctions};
+			true ->
+				{careful_exports(AllNewExports, Forms), careful_functions(AllNewFunctions, Forms)}
+		end,
+    UpToExport ++ [Exports] ++ ExportAndFunctions ++ Functions ++ OrigFunctions ++ Eof.
+
+careful_exports(NewExportDecl, AllForms) ->
+	{attribute, Line, export, NewExports} = NewExportDecl,
+	OrigDecl = lists:foldl(fun
+		({attribute, _, export, Exp}, Acc) ->
+			Exp ++ Acc;
+		(_, Acc) ->
+			Acc
+	end, [], AllForms),
+	SafeExports = NewExports -- OrigDecl,
+	{attribute, Line, export, SafeExports}.
+
+careful_functions(NewFunctions, AllForms) ->
+	ExistingFuncs = lists:foldl(fun
+		({function, _Line, Name, Arity, _Clauses}, Acc) ->
+			[{Name, Arity} | Acc];
+		(_, Acc) ->
+			Acc
+	end, [], AllForms),
+	lists:filter(fun({function, _Line, Name, Arity, _Clauses}) ->
+		not lists:member({Name, Arity}, ExistingFuncs)
+	end, NewFunctions).
 
 %% ---------------------------------------------------------------------------
 %% to json
