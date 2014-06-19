@@ -71,9 +71,9 @@ insert_new_bits(Forms, Exports, Functions) ->
             true
     end,
     {NoEof, Eof} = lists:splitwith(EofSplit, Forms),
-    {UpToExport, ExportAndRest} = lists:splitwith(ExportSplit, NoEof),
-    {UpToFunctions, OrigFunctions} = lists:splitwith(FunctionsSplit, ExportAndRest),
-    UpToExport ++ [Exports] ++ UpToFunctions ++ Functions ++ OrigFunctions ++ Eof.
+    {UpToFunctions, OrigFunctions} = lists:splitwith(FunctionsSplit, NoEof),
+    {UpToExport, BetweenExportAndFunctions} = lists:splitwith(ExportSplit, UpToFunctions),
+    UpToExport ++ [Exports] ++ BetweenExportAndFunctions ++ Functions ++ OrigFunctions ++ Eof.
 
 %% ---------------------------------------------------------------------------
 %% to json
