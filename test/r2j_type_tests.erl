@@ -31,43 +31,56 @@ proper_test_gen([ProperTest | Tail]) ->
 %% proper funcs.
 prop_integer() ->
     ?FORALL(Val, oneof([int(), real()]),
-		begin
-		    Got = r2j_type:integer(Val),
-				Expected = if
-				    is_integer(Val) ->
-				        {ok, Val};
-						true ->
-						    error
-				end,
-				Expected == Got
-		end).
+    begin
+        Got = r2j_type:integer(Val),
+        Expected = if
+            is_integer(Val) ->
+                {ok, Val};
+            true ->
+                error
+        end,
+        Expected == Got
+    end).
 
 prop_integer_min_max() ->
     ?FORALL({Min, Length, Val}, {int(), int(), oneof([int(), real(), <<"bin">>])},
-		begin
+    begin
         Max = Min + Length,
-				Expected = if
-				    is_integer(Val) andalso Min =< Val andalso Val =< Max ->
-						    {ok, Val};
-						true ->
-						    error
-				end,
-				Got = r2j_type:integer(Val, Min, Max),
-				Expected == Got
-		end).
+        Expected = if
+            is_integer(Val) andalso Min =< Val andalso Val =< Max ->
+                {ok, Val};
+            true ->
+                error
+        end,
+        Got = r2j_type:integer(Val, Min, Max),
+        Expected == Got
+    end).
 
 prop_string() ->
     ?FORALL({Val, MaybeLen}, {binary(), int()},
-		begin
+    begin
         Len = abs(MaybeLen),
-				Expected = if
-				    size(Val) =< Len ->
-						    {ok, Val};
-						true ->
-						    error
-				end,
-				Got = r2j_type:string(Val, Len),
-				Expected == Got
-		end).
+        Expected = if
+            size(Val) =< Len ->
+                {ok, Val};
+            true ->
+                error
+        end,
+        Got = r2j_type:string(Val, Len),
+        Expected == Got
+    end).
+
+prop_float() ->
+    ?FORALL(Val, oneof([int(), real(), <<"bin">>]),
+    begin
+        Expected = if
+            is_binary(Val) ->
+                error;
+            true ->
+                {ok, Val}
+        end,
+        Got = r2j_type:float(Val),
+        Expected == Got
+    end).
 
 -endif.

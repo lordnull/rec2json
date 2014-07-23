@@ -31,6 +31,14 @@ neg_integer(_) ->
 
 float(N) when is_float(N) ->
     {ok, N};
+float(N) when is_integer(N) ->
+    try N * 1.0 of
+        _ ->
+            {ok, N}
+    catch
+      {error, badarith} ->
+          error
+    end;
 float(_) ->
     error.
 

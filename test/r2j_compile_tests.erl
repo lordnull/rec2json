@@ -68,17 +68,17 @@ compile_strings_test_() -> [
     end},
 
     {"record with various defaults defined", 
-			lists:map(fun(DefaultStr) ->
-				{DefaultStr, fun() ->
-					Str = "-record(cst7, { f = " ++ DefaultStr ++ " }).",
-					r2j_compile:scan_string(Str, [])
-				end}
-			end, ["1", "{1}", "\"string\"", "atom", "mod:func()", "mod:func(1)",
-				"[1, 2, 3]", "#record_name{}", "#record_name{field_name = 1}",
-				"{1, #record_name{}}", "[#record_name{}, 1, \"string\"]",
-				"mod:func(#record_name{field_name = 1})",
-				"#record_name{field_name = #sub_rec{}}", "[a|b]"])
-		}
+      lists:map(fun(DefaultStr) ->
+        {DefaultStr, fun() ->
+          Str = "-record(cst7, { f = " ++ DefaultStr ++ " }).",
+          r2j_compile:scan_string(Str, [])
+        end}
+      end, ["1", "{1}", "\"string\"", "atom", "mod:func()", "mod:func(1)",
+        "[1, 2, 3]", "#record_name{}", "#record_name{field_name = 1}",
+        "{1, #record_name{}}", "[#record_name{}, 1, \"string\"]",
+        "mod:func(#record_name{field_name = 1})",
+        "#record_name{field_name = #sub_rec{}}", "[a|b]"])
+    }
 
     ].
 
@@ -140,9 +140,9 @@ parse_transform_test_() ->
             ?assert(erlang:function_exported(test_person, name, 1))
         end},
 
-				{"has getters", fun() ->
-						?assert(erlang:function_exported(test_person, name, 2))
-				end},
+        {"has getters", fun() ->
+            ?assert(erlang:function_exported(test_person, name, 2))
+        end},
 
         {"compile and load with no accessors", fun() ->
             {ok, _Module, Binary} = compile:file("../test/test_person", [binary, {rec2json, [{generate_accessors, false}]}]),
@@ -159,53 +159,53 @@ parse_transform_test_() ->
             ?assert(erlang:function_exported(test_person, from_json, 1))
         end},
 
-				{"has getters", fun() ->
-					?assert(erlang:function_exported(test_person, name, 2))
-				end},
+        {"has getters", fun() ->
+          ?assert(erlang:function_exported(test_person, name, 2))
+        end},
 
-				{"compile and load with no settors", fun() ->
+        {"compile and load with no settors", fun() ->
             {ok, _Module, Binary} = compile:file("../test/test_person", [binary, {rec2json, [{generate_setters, false}]}]),
             Got = code:load_binary(test_person, "../test/test_no_setters", Binary),
             ?assertEqual({module, test_person}, Got)
-				end},
+        end},
 
-				{"has no setters", fun() ->
-						?assertNot(erlang:function_exported(test_person, name, 2))
-				end},
+        {"has no setters", fun() ->
+            ?assertNot(erlang:function_exported(test_person, name, 2))
+        end},
 
-				{"no setters has accessor", fun() ->
-						?assert(erlang:function_exported(test_person, name, 1))
-				end},
+        {"no setters has accessor", fun() ->
+            ?assert(erlang:function_exported(test_person, name, 1))
+        end},
 
-				{"no setters has to/from json", fun() ->
-						?assert(erlang:function_exported(test_person, to_json, 1)),
-						?assert(erlang:function_exported(test_person, from_json, 1))
-				end},
+        {"no setters has to/from json", fun() ->
+            ?assert(erlang:function_exported(test_person, to_json, 1)),
+            ?assert(erlang:function_exported(test_person, from_json, 1))
+        end},
 
-				{"compile with no accessors or setters", fun() ->
+        {"compile with no accessors or setters", fun() ->
             {ok, _Module, Binary} = compile:file("../test/test_person", [
-								binary,
-								{rec2json, [
-										{generate_setters, false},
-										{generate_accessors, false}
-								]}
-						]),
+                binary,
+                {rec2json, [
+                    {generate_setters, false},
+                    {generate_accessors, false}
+                ]}
+            ]),
             Got = code:load_binary(test_person, "../test/test_no_getset", Binary),
             ?assertEqual({module, test_person}, Got)
-				end},
+        end},
 
-				{"has no setters", fun() ->
-						?assertNot(erlang:function_exported(test_person, name, 1))
-				end},
+        {"has no setters", fun() ->
+            ?assertNot(erlang:function_exported(test_person, name, 1))
+        end},
 
-				{"has no getter", fun() ->
-						?assertNot(erlang:function_exported(test_person, name, 2))
-				end},
+        {"has no getter", fun() ->
+            ?assertNot(erlang:function_exported(test_person, name, 2))
+        end},
 
-				{"has to/from json", fun() ->
-						?assert(erlang:function_exported(test_person, to_json, 1)),
-						?assert(erlang:function_exported(test_person, from_json, 1))
-				end}
+        {"has to/from json", fun() ->
+            ?assert(erlang:function_exported(test_person, to_json, 1)),
+            ?assert(erlang:function_exported(test_person, from_json, 1))
+        end}
 
     ] end}.
 
@@ -457,18 +457,18 @@ feature_test_() ->
             lists:map(Test, NameAndN)
         end},
 
-				{"setter functions", fun() ->
-						Record = #feature{},
-						Fields = record_info(fields, feature),
-						NameAndN = lists:zip(Fields, lists:seq(2, length(Fields) + 1)),
-						Test = fun({Setter, Nth}) ->
-								R1 = Record:Setter(Nth),
-								?assertEqual(Nth, R1:Setter()),
-								R2 = R1:Setter(goober),
-								?assertEqual(goober, R2:Setter())
-						end,
-						lists:map(Test, NameAndN)
-				end},
+        {"setter functions", fun() ->
+            Record = #feature{},
+            Fields = record_info(fields, feature),
+            NameAndN = lists:zip(Fields, lists:seq(2, length(Fields) + 1)),
+            Test = fun({Setter, Nth}) ->
+                R1 = Record:Setter(Nth),
+                ?assertEqual(Nth, R1:Setter()),
+                R2 = R1:Setter(goober),
+                ?assertEqual(goober, R2:Setter())
+            end,
+            lists:map(Test, NameAndN)
+        end},
 
         {"Field list function", fun() ->
             Fields = record_info(fields, feature),
@@ -480,15 +480,15 @@ feature_test_() ->
             Fields = record_info(fields, feature),
             Got = feature:field_types(),
             Types = [{any,[]}, {any,[]},
-						    {specific, [undefined, {r2j_type, integer, []}]},
+                {specific, [undefined, {r2j_type, integer, []}]},
                 {specific, [undefined, {r2j_type, boolean, []}]},
-								{specific, [undefined, {r2j_type, binary, []}]},
+                {specific, [undefined, {r2j_type, binary, []}]},
                 {specific, [undefined, {list, {specific, [{r2j_type, integer, []}]}}]},
-								{specific, [undefined, null]},
+                {specific, [undefined, null]},
                 {specific, [undefined, {record, included}]},
-								{specific, [{r2j_type, integer, []}]},
+                {specific, [{r2j_type, integer, []}]},
                 {specific, [undefined, {r2j_type, integer, []}, {r2j_type, boolean, []}]},
-								{specific, [undefined, {r2j_type, pos_integer, []}]},
+                {specific, [undefined, {r2j_type, pos_integer, []}]},
                 {specific, [undefined, init, ready, steady]},
                 {specific, [undefined, {r2j_type, integer, [-100, 100]}]}
             ],
@@ -674,7 +674,13 @@ prop_float() ->
             is_float(Float) ->
                 {ok, Expected} == Got;
             true ->
-                {ok, Expected, [f]} == Got
+                try Float * 1.0 of
+                    _ ->
+                        {ok, Expected} == Got
+                catch
+                    error:bararith ->
+                        {ok, Expected, [f]} == Got
+                end
         end
     end).
 
@@ -769,24 +775,24 @@ prop_r2j_integer_type() ->
                 {ok, Rec, [f]}
         end,
         Got = prop_r2j_integer_type:from_json(Json),
-				case Got of
-				    Expected ->
-						    try prop_r2j_integer_type:to_json(Rec) of
-								    MaybeGood when is_integer(Val) ->
-										   jsx:to_json(Json) == jsx:to_json(MaybeGood);
-									  NotGood ->
-										    ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
-										    false
-								catch
-								    error:{badarg, {f, Val, {specific, [undefined, {r2j_type, integer, []}]}}} when not is_integer(Val) ->
-										    true;
-										W:Y ->
-										    ?debugFmt("Not the boom I expected: ~p:~p", [W,Y]),
-										    false
-								end;
-						_ ->
-						    ?debugFmt("Expected: ~p; got ~p", [Expected, Got])
-				end
+        case Got of
+            Expected ->
+                try prop_r2j_integer_type:to_json(Rec) of
+                    MaybeGood when is_integer(Val) ->
+                       jsx:to_json(Json) == jsx:to_json(MaybeGood);
+                    NotGood ->
+                        ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
+                        false
+                catch
+                    error:{badarg, {f, Val, {specific, [undefined, {r2j_type, integer, []}]}}} when not is_integer(Val) ->
+                        true;
+                    W:Y ->
+                        ?debugFmt("Not the boom I expected: ~p:~p", [W,Y]),
+                        false
+                end;
+            _ ->
+                ?debugFmt("Expected: ~p; got ~p", [Expected, Got])
+        end
     end).
 
 prop_r2j_integer_min_max_type() ->
@@ -802,24 +808,24 @@ prop_r2j_integer_min_max_type() ->
                 {ok, Rec, [f]}
         end,
         Got = prop_r2j_integer_min_max_type:from_json(Json),
-				case Got of
-				    Expected ->
-						    try prop_r2j_integer_min_max_type:to_json(Rec) of
-								    MaybeGood when is_integer(Val), -100 =< Val, Val =< 100 ->
-										    jsx:to_json(Json) == jsx:to_json(MaybeGood);
-										NotGood ->
-										    ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
-												false
-								catch
-								    error:{badarg, {f, Val, {specific, [undefined, {r2j_type, integer, [-100, 100]}]}}} when not is_integer(Val); Val < -100; 100 < Val ->
-										    true;
-										W:Y ->
-										    ?debugFmt("not the boom I expected: ~p:~p", [W,Y]),
-												false
-								end;
-						_ ->
-						    ?debugFmt("Expected: ~p; got: ~p", [Expected, Got])
-				end
+        case Got of
+            Expected ->
+                try prop_r2j_integer_min_max_type:to_json(Rec) of
+                    MaybeGood when is_integer(Val), -100 =< Val, Val =< 100 ->
+                        jsx:to_json(Json) == jsx:to_json(MaybeGood);
+                    NotGood ->
+                        ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
+                        false
+                catch
+                    error:{badarg, {f, Val, {specific, [undefined, {r2j_type, integer, [-100, 100]}]}}} when not is_integer(Val); Val < -100; 100 < Val ->
+                        true;
+                    W:Y ->
+                        ?debugFmt("not the boom I expected: ~p:~p", [W,Y]),
+                        false
+                end;
+            _ ->
+                ?debugFmt("Expected: ~p; got: ~p", [Expected, Got])
+        end
     end).
 
 prop_r2j_min_max_listed() ->
@@ -843,28 +849,28 @@ prop_r2j_min_max_listed() ->
                 {ok, Rec, TaggedWarns}
         end,
         Got = prop_r2j_integer_min_max_listed:from_json(Json),
-				IsGoodValue = lists:all(fun(N) ->
-				    is_integer(N) andalso -100 =< N andalso N =< 100
-				end, Val),
-				case Got of
-				    Expected ->
-						    try prop_r2j_integer_min_max_listed:to_json(Rec) of
-								    Good when IsGoodValue ->
-										    jsx:to_json(Json) == jsx:to_json(Good);
-										NotGood ->
-										    ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
-												false
-								catch
-								    error:{badarg, {f, Val, {specific, [undefined, {list, {specific, [{r2j_type, integer, [-100, 100]}]}}]}}} when not IsGoodValue ->
-										    true;
-										W:Y ->
-										    ?debugFmt("not the boom I was expected: ~p:~p", [W,Y]),
-												false
-								end;
-						_ ->
-						    ?debugFmt("Expected: ~p; got ~p", [Expected, Got]),
-								false
-				end
+        IsGoodValue = lists:all(fun(N) ->
+            is_integer(N) andalso -100 =< N andalso N =< 100
+        end, Val),
+        case Got of
+            Expected ->
+                try prop_r2j_integer_min_max_listed:to_json(Rec) of
+                    Good when IsGoodValue ->
+                        jsx:to_json(Json) == jsx:to_json(Good);
+                    NotGood ->
+                        ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
+                        false
+                catch
+                    error:{badarg, {f, Val, {specific, [undefined, {list, {specific, [{r2j_type, integer, [-100, 100]}]}}]}}} when not IsGoodValue ->
+                        true;
+                    W:Y ->
+                        ?debugFmt("not the boom I was expected: ~p:~p", [W,Y]),
+                        false
+                end;
+            _ ->
+                ?debugFmt("Expected: ~p; got ~p", [Expected, Got]),
+                false
+        end
     end).
 
 prop_r2j_type_translation() ->
