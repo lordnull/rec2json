@@ -37,10 +37,10 @@ parse_transform(RawForms, Options) ->
         undefined -> [];
         P -> P
     end,
-		%% always kinda icky to use an undocumented function.
-		%% however, without this, the abstract record forms passed in lack the
-		%% type information needed for user defined types to work properly.
-		Forms = epp:restore_typed_record_fields(RawForms),
+    %% always kinda icky to use an undocumented function.
+    %% however, without this, the abstract record forms passed in lack the
+    %% type information needed for user defined types to work properly.
+    Forms = epp:restore_typed_record_fields(RawForms),
     ModuleName = hd([Mod || {attribute, _Line, module, Mod} <- Forms]),
     MaybeRecords = [R || {attribute, _Line, record, {RecordName, _Fields}} = R <- Forms, ModuleName == RecordName],
     case MaybeRecords of
@@ -73,35 +73,35 @@ insert_new_bits(Forms, AllNewExports, AllNewFunctions, Params) ->
     {NoEof, Eof} = lists:splitwith(EofSplit, Forms),
     {UpToFunctions, OrigFunctions} = lists:splitwith(FunctionsSplit, NoEof),
     {UpToExport, ExportAndFunctions} = lists:splitwith(ExportSplit, UpToFunctions),
-		{Exports, Functions} = case proplists:get_value(careful, Params, true) of
-			false ->
-				{AllNewExports, AllNewFunctions};
-			true ->
-				{careful_exports(AllNewExports, Forms), careful_functions(AllNewFunctions, Forms)}
-		end,
+    {Exports, Functions} = case proplists:get_value(careful, Params, true) of
+        false ->
+            {AllNewExports, AllNewFunctions};
+        true ->
+            {careful_exports(AllNewExports, Forms), careful_functions(AllNewFunctions, Forms)}
+    end,
     UpToExport ++ [Exports] ++ ExportAndFunctions ++ Functions ++ OrigFunctions ++ Eof.
 
 careful_exports(NewExportDecl, AllForms) ->
-	{attribute, Line, export, NewExports} = NewExportDecl,
-	OrigDecl = lists:foldl(fun
-		({attribute, _, export, Exp}, Acc) ->
-			Exp ++ Acc;
-		(_, Acc) ->
-			Acc
-	end, [], AllForms),
-	SafeExports = NewExports -- OrigDecl,
-	{attribute, Line, export, SafeExports}.
+    {attribute, Line, export, NewExports} = NewExportDecl,
+    OrigDecl = lists:foldl(fun
+        ({attribute, _, export, Exp}, Acc) ->
+            Exp ++ Acc;
+        (_, Acc) ->
+            Acc
+    end, [], AllForms),
+    SafeExports = NewExports -- OrigDecl,
+    {attribute, Line, export, SafeExports}.
 
 careful_functions(NewFunctions, AllForms) ->
-	ExistingFuncs = lists:foldl(fun
-		({function, _Line, Name, Arity, _Clauses}, Acc) ->
-			[{Name, Arity} | Acc];
-		(_, Acc) ->
-			Acc
-	end, [], AllForms),
-	lists:filter(fun({function, _Line, Name, Arity, _Clauses}) ->
-		not lists:member({Name, Arity}, ExistingFuncs)
-	end, NewFunctions).
+    ExistingFuncs = lists:foldl(fun
+        ({function, _Line, Name, Arity, _Clauses}, Acc) ->
+            [{Name, Arity} | Acc];
+        (_, Acc) ->
+            Acc
+    end, [], AllForms),
+    lists:filter(fun({function, _Line, Name, Arity, _Clauses}) ->
+        not lists:member({Name, Arity}, ExistingFuncs)
+    end, NewFunctions).
 
 %% ---------------------------------------------------------------------------
 %% to json
@@ -116,7 +116,7 @@ to_json(Tuple, Options) when is_tuple(Tuple) ->
     Types = Module:field_types(),
     Zipped = lists:zip(Values, Types),
     {TreatUndef, ReversedJsonProps} = lists:foldl(fun
-        ({undefined, {Name, _FTypes}}, {skip, Acc}) ->
+        ({undefined, {_Name, _FTypes}}, {skip, Acc}) ->
             {skip, Acc};
         ({undefined, {Name, _FTypes}}, {null, Acc}) ->
             {null, [{Name, null} | Acc]};
@@ -218,7 +218,7 @@ maybe_convertable(_Value, [], _Options) ->
 
 maybe_convertable(Value, [{Mod, Func, Args} | Types], Options) ->
     Arity = length(Args) + 1,
-		code:ensure_loaded(Mod),
+    code:ensure_loaded(Mod),
     case erlang:function_exported(Mod, Func, Arity) of
         true ->
             case erlang:apply(Mod, Func, [Value | Args]) of
@@ -291,7 +291,7 @@ maybe_convertable(Json, [{record, RecName} | Types], Options) when is_list(Json)
 maybe_convertable(Value, [{record, _RecName} | Types], Options) ->
     maybe_convertable(Value, Types, Options);
 
-maybe_convertable(Values, [{list, ListTypes} | Types], Options) when is_list(Values) ->
+maybe_convertable(Values, [{list, ListTypes} | _Types], Options) when is_list(Values) ->
     Indexs = lists:seq(1, length(Values)),
     Indexed = lists:zip(Indexs, Values),
     {NewValues, Warnings} = lists:foldl(fun({Index, Value}, {ValAcc, WarnAcc}) ->
@@ -403,18 +403,18 @@ verify_type(Val, [Atom | Tail], Any, TreatNull, Opt) when is_binary(Val), is_ato
     end;
 verify_type(Val, [{Module, Function, Args} | Tail], Any, TreatNull, Opt) ->
     case erlang:function_exported(Module, Function, length(Args) + 1) of
-		    true ->
-				    case erlang:apply(Module, Function, [Val | Args]) of
+        true ->
+            case erlang:apply(Module, Function, [Val | Args]) of
                 true ->
-								    {ok, Val};
-								{ok, NewVal} ->
-								    {ok, NewVal};
-								false ->
-								    {warn, Val}
-						end;
-				false ->
-				    verify_type(Val, Tail, Any, TreatNull, Opt)
-		end;
+                    {ok, Val};
+                {ok, NewVal} ->
+                    {ok, NewVal};
+                false ->
+                    {warn, Val}
+            end;
+        false ->
+            verify_type(Val, Tail, Any, TreatNull, Opt)
+    end;
 verify_type(Val, [_Type | Tail], Any, TreatNull, Opt) ->
     %?log("unrecognized type ~p, evaling val ~p", [Type, Val]),
     verify_type(Val, Tail, Any, TreatNull, Opt).
