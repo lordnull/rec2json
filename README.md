@@ -22,7 +22,7 @@ to_json and from_json convert to and from the
 records that have been compiled using rec2json.
 * Generated module has accessor functions for fields and field_names for
 list of fields in the record.
-* Above feature can be surpressed.
+* Above feature can be surpressed, and is careful by default.
 * Generated module exports functions to examine structure and types for a
 record.
 
@@ -69,6 +69,12 @@ true, functions for setting the fields of a record are created and
 exported. These are of the form Field(NewVal, Record) or
 Record:Field(NewVal). If set to false, they are not created nor exported.
 		</td>
+	</tr>
+	<tr>
+		<td>careful</td> <td>true : boolean()</td> <td> If set to true,
+rec2json's parse transform avoid altering or adding functions that are
+already defined in the module. This means you can override the default
+to_json/1 function to call to_json/2 with a specific set of options.</td>
 	</tr>
 </table>
 
