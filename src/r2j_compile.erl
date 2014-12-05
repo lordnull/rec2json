@@ -17,6 +17,13 @@
 -export([scan_file/2, scan_string/2]).
 -export([simplify_fields/1, export_declaration/1, export_declaration/2, additional_funcs/3]).
 
+-record(record_field, {
+    name, name_form,
+    default_form,
+    typelist = [],
+    allow_any = true
+}).
+
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -define(log(Msg, Args), ?debugFmt(Msg, Args)).
@@ -112,23 +119,44 @@ simplify_fields({attribute, _Line, record, {_RecName, Fields}}) ->
 simplify_fields([], Acc) ->
     lists:reverse(Acc);
 
-simplify_fields([{record_field, _Line, Name} | Tail], Acc) ->
-    Name2 = erl_parse:normalise(Name),
-    simplify_fields(Tail, [{Name2, undefined, {any, []}} | Acc]);
+simplify_fields([{record_field, Line, NameForm} | Tail], Acc) ->
+    Name = erl_parse:normalise(NameForm),
+    FieldRec = #record_field{name = Name, name_form = NameForm,
+        default_form = undefined_default(Line) },
+    simplify_fields(Tail, [FieldRec | Acc]);
 
-simplify_fields([{record_field, _L1, Name, Default} | Tail], Acc) ->
-    Name2 = erl_parse:normalise(Name),
-    simplify_fields(Tail, [{Name2, Default, {any, []}} | Acc]);
+simplify_fields([{record_field, _Line, NameForm, Default} | Tail], Acc) ->
+    Name = erl_parse:normalise(NameForm),
+    FieldRec = #record_field{name = Name, name_form = NameForm, default_form = Default},
+    simplify_fields(Tail, [FieldRec | Acc]);
 
-simplify_fields([{typed_record_field, {record_field, _L1, Name}, Type} | Tail], Acc) ->
-    Name2 = erl_parse:normalise(Name),
-    Types = extract_types(Type),
-    simplify_fields(Tail, [{Name2, undefined, Types} | Acc]);
+simplify_fields([{typed_record_field, {record_field, Line, NameForm}, Type} | Tail], Acc) ->
+    Name = erl_parse:normalise(NameForm),
+    {AnyNess, Types} = extract_types(Type),
+    AllowAny = case AnyNess of
+        any -> true;
+        _ -> false
+    end,
+    FieldRec = #record_field{name = Name, name_form = NameForm,
+        default_form = undefined_default(Line), allow_any = AllowAny,
+        typelist = Types},
+    simplify_fields(Tail, [FieldRec | Acc]);
 
-simplify_fields([{typed_record_field, {record_field, _L1, Name, Default}, Type} | Tail], Acc) ->
-    Name2 = erl_parse:normalise(Name),
-    Types = extract_types(Type),
-    simplify_fields(Tail, [{Name2, Default, Types} | Acc]).
+simplify_fields([{typed_record_field, {record_field, _L1, NameForm, Default}, Type} | Tail], Acc) ->
+    Name = erl_parse:normalise(NameForm),
+    {AnyNess, Types} = extract_types(Type),
+    AllowAny = case AnyNess of
+        any ->
+            true;
+        _ ->
+            false
+    end,
+    FieldRec = #record_field{name = Name, name_form = NameForm,
+        default_form = Default, allow_any = AllowAny, typelist = Types},
+    simplify_fields(Tail, [FieldRec | Acc]).
+
+undefined_default(Line) ->
+    erl_parse:abstract(undefined, Line).
 
 extract_types({type, _L1, union, Types}) ->
     extract_types(Types, []);
@@ -213,14 +241,14 @@ create_module(RecordName, Fields, Params) ->
 additional_funcs(RecordName, Fields, Params) ->
     GenerateAccessors = proplists:get_value(generate_accessors, Params, true),
     AccessorFuncs = case GenerateAccessors of
-        true -> accessor_funcs(Fields);
+        true -> getter_funcs(Fields);
         false -> []
     end,
-		GenerateSetters = proplists:get_value(generate_setters, Params, true),
-		SetterFuncs = case GenerateSetters of
-				true -> setter_funcs(Fields);
-				false -> []
-		end,
+    GenerateSetters = proplists:get_value(generate_setters, Params, true),
+    SetterFuncs = case GenerateSetters of
+        true -> setter_funcs(Fields);
+        false -> []
+    end,
     {ok, FieldListFunc} = get_field_names_func(Fields),
     {ok, TypeListFunc} = get_field_types_func(Fields),
     {ok, ToJsonA1} = to_json_arity1_func(),
@@ -229,106 +257,102 @@ additional_funcs(RecordName, Fields, Params) ->
     {ok, FromJsonA2} = from_json_arity2_func(RecordName, Fields),
     {ok, FromJsonA3} = from_json_arity3_func(),
     ScrubKeys = scrub_keys_func(Fields),
-    GrandFuncList = AccessorFuncs ++ SetterFuncs ++
-				[FieldListFunc, TypeListFunc,
-        ToJsonA1, ToJsonA2,
-				FromJsonA1, FromJsonA2, FromJsonA3]
-        ++ ScrubKeys,
-    {ok, GrandFuncList}.
-
-parse_strings(Strings) ->
-    parse_strings(Strings, []).
-
-parse_strings([], Acc) ->
-    lists:reverse(Acc);
-
-parse_strings([Str | Tail], Acc) ->
-    {ok, Form} = parse_string(Str),
-    parse_strings(Tail, [Form | Acc]).
-
-parse_string(Str) ->
-    {ok, Tokens, _Line} = erl_scan:string(Str),
-    erl_parse:parse_form(Tokens).
+    GrandFuncList = []
+        ++ AccessorFuncs
+        ++ SetterFuncs
+        ++ [FieldListFunc]
+        ++ [TypeListFunc]
+        ++ [ToJsonA1]
+        ++ [ToJsonA2]
+        ++ [FromJsonA1]
+        ++ [FromJsonA2]
+        ++ [FromJsonA3]
+        ++ ScrubKeys
+    , {ok, GrandFuncList}.
 
 module_declaration(Name) ->
-    String = lists:flatten(io_lib:format("-module(~p).", [Name])),
-    {ok, Tokens, _Line} = erl_scan:string(String),
-    erl_parse:parse_form(Tokens).
+    {ok, {attribute, 1, module, Name}}.
 
 export_declaration(Fields) ->
     export_declaration(Fields, []).
+
 export_declaration(Fields, Params) ->
+    Line = proplists:get_value(line, Params, 1),
     GenerateAccessors = proplists:get_value(generate_accessors, Params, true),
     FieldDecs = case GenerateAccessors of
-        true -> export_declarations(Fields, []);
+        true -> lists:map(fun getter_export_declaration/1, Fields);
         false -> []
     end,
-		GenerateSetters = proplists:get_value(generate_setters, Params, true),
-		SetFieldDecs = case GenerateSetters of
-				true -> export_setters(Fields, []);
-				false -> []
-		end,
-    Decs = ["field_names/0", "field_types/0", "to_json/1", "to_json/2",
-        "from_json/1", "from_json/2", "from_json/3"] ++ FieldDecs ++
-				SetFieldDecs,
-    Decs1 = string:join(Decs, ","),
-    String = lists:flatten(io_lib:format("-export([~s]).", [Decs1])),
-    {ok, Tokens, _Line} = erl_scan:string(String),
-    erl_parse:parse_form(Tokens).
+    GenerateSetters = proplists:get_value(generate_setters, Params, true),
+    SetFieldDecs = case GenerateSetters of
+        true -> lists:map(fun setter_export_declaration/1, Fields);
+        false -> []
+    end,
+    Decs = [{field_names, 0}, {field_types, 0}, {to_json, 1}, {to_json, 2},
+        {from_json, 1}, {from_json, 2}, {from_json, 3}] ++ FieldDecs ++
+        SetFieldDecs,
+    {ok, {attribute, Line, export, Decs}}.
 
-export_declarations([], Acc) ->
-    lists:reverse(Acc);
+getter_export_declaration(Rec) ->
+    {Rec#record_field.name, 1}.
 
-export_declarations([{K, _Default, _Types} | Tail], Acc) ->
-    D = lists:flatten(io_lib:format("~p/1", [K])),
-    export_declarations(Tail, [D | Acc]).
+setter_export_declaration(Rec) ->
+    {Rec#record_field.name, 2}.
 
-export_setters([], Acc) ->
-		lists:reverse(Acc);
+getter_funcs(Fields) ->
+    EndSeq = 2 + length(Fields) - 1,
+    Ns = lists:seq(2, EndSeq),
+    Zipped = lists:zip(Ns, Fields),
+    lists:map(fun getter_func/1, Zipped).
 
-export_setters([{K, _Default, _Types} | Tail], Acc) ->
-		D = lists:flatten(io_lib:format("~p/2", [K])),
-		export_setters(Tail, [D | Acc]).
-
-accessor_funcs(Fields) ->
-    accessor_funcs(Fields, 2, []).
-
-accessor_funcs([], _Num, Acc) ->
-    lists:reverse(Acc);
-
-accessor_funcs([{K, _Default, _Type} | Tail], N, Acc) ->
-    FunctionStr = "~p(Struct) -> element(~p, Struct).",
-    FunctionStr1 = lists:flatten(io_lib:format(FunctionStr, [K, N])),
-    {ok, Tokens, _Line} = erl_scan:string(FunctionStr1),
-    {ok, Forms} = erl_parse:parse_form(Tokens),
-    accessor_funcs(Tail, N + 1, [Forms | Acc]).
+getter_func({ElementN, FieldRec}) ->
+    {function, ?LINE, FieldRec#record_field.name, 1, [
+        {clause, ?LINE, [{var, ?LINE, 'Record'}], [], [
+            {call, ?LINE, {atom, ?LINE, element}, [
+                {integer, ?LINE, ElementN},
+                {var, ?LINE, 'Record'}
+            ]}
+        ]}
+    ]}.
 
 setter_funcs(Fields) ->
-		setter_funcs(Fields, 2, []).
+    EndSeq = 2 + length(Fields) - 1,
+    Ns = lists:seq(2, EndSeq),
+    Zipped = lists:zip(Ns, Fields),
+    lists:map(fun setter_func/1, Zipped).
 
-setter_funcs([], _Num, Acc) ->
-		lists:reverse(Acc);
-
-setter_funcs([{K, _Default, _Type} | Tail], N, Acc) ->
-		FunctionStr = "~p(NewVal, Struct) -> setelement(~p, Struct, NewVal).",
-		FuncStr1 = lists:flatten(io_lib:format(FunctionStr, [K, N])),
-		{ok, Tokens, _Line} = erl_scan:string(FuncStr1),
-		{ok, Forms} = erl_parse:parse_form(Tokens),
-		setter_funcs(Tail, N + 1, [Forms | Acc]).
+setter_func({ElementN, FieldRec}) ->
+    {function, ?LINE, FieldRec#record_field.name, 2, [
+        {clause, ?LINE, [{var, ?LINE, 'NewVal'}, {var, ?LINE, 'Record'}], [], [
+            {call, ?LINE, {atom, ?LINE, setelement}, [{integer, ?LINE, ElementN}, {var, ?LINE, 'Record'}, {var, ?LINE, 'NewVal'}]}
+        ]}
+    ]}.
 
 get_field_names_func(Fields) ->
-    Names = [F || {F, _, _} <- Fields],
-    Str = lists:flatten(io_lib:format("field_names() -> ~p.", [Names])),
-    parse_string(Str).
+    NameCons = lists:foldl(fun(FieldRec, ConsAcc) ->
+        {cons, ?LINE, FieldRec#record_field.name_form, ConsAcc}
+    end, {nil, ?LINE}, lists:reverse(Fields)),
+    {ok, {function, ?LINE, field_names, 0, [
+        {clause, ?LINE, [], [], [
+            NameCons
+        ]}
+    ]}}.
 
 get_field_types_func(Fields) ->
-    TypeProps = lists:map(fun({FieldName, _Default, {Anyness, Types}}) ->
-        TypeProp = exportable_types(Types),
-        {FieldName, {Anyness, TypeProp}}
-      end, Fields),
-      FuncStr = "field_types() -> ~p.",
-      Str = lists:flatten(io_lib:format(FuncStr, [TypeProps])),
-      parse_string(Str).
+    TypeProps = lists:map(fun(FieldRecord) ->
+        TypeProp = exportable_types(FieldRecord#record_field.typelist),
+        Anyness = case FieldRecord#record_field.allow_any of
+            true -> any;
+            false -> specific
+        end,
+        {FieldRecord#record_field.name, {Anyness, TypeProp}}
+    end, Fields),
+    AbstractedProps = erl_parse:abstract(TypeProps),
+    {ok, {function, ?LINE, field_types, 0, [
+        {clause, ?LINE, [], [], [
+            AbstractedProps
+        ]}
+    ]}}.
 
 exportable_types({list, ListDef}) ->
     Exportable = exportable_types(ListDef),
@@ -358,155 +382,136 @@ exportable_types(Wut) ->
     Wut.
 
 to_json_arity1_func() ->
-    FunctionStr = "to_json(Struct) -> rec2json:to_json(Struct, []).",
-    {ok, Tokens, _Line} = erl_scan:string(FunctionStr),
-    erl_parse:parse_form(Tokens).
+    {ok, {function, ?LINE, to_json, 1, [
+        {clause, ?LINE, [{var, ?LINE, 'Struct'}], [], [
+            {call, ?LINE, {remote, ?LINE, {atom, ?LINE, rec2json}, {atom, ?LINE, to_json}}, [{var, ?LINE, 'Struct'}, {nil, ?LINE}]}
+        ]}
+    ]}}.
 
 to_json_arity2_func() ->
-    FunctionStr =
-        "to_json(Struct, Options) when is_tuple(Struct) ->"
-        "    rec2json:to_json(Struct, Options);"
-        "to_json(Options, Struct) ->"
-        "    to_json(Struct, Options).",
-    parse_string(FunctionStr).
+    {ok, {function, ?LINE, to_json, 2, [
+        {clause, ?LINE, [{var, ?LINE, 'Struct'}, {var, ?LINE, 'Options'}], [[{call, ?LINE, {atom, ?LINE, is_tuple}, [{var, ?LINE, 'Struct'}]}]], [
+            {call, ?LINE, {remote, ?LINE, {atom, ?LINE, rec2json}, {atom, ?LINE, to_json}}, [{var, ?LINE, 'Struct'}, {var, ?LINE, 'Options'}]}
+        ]},
+        {clause, ?LINE, [{var, ?LINE, 'Options'}, {var, ?LINE, 'Struct'}], [[{call, ?LINE, {atom, ?LINE, is_tuple}, [{var, ?LINE, 'Struct'}]}]], [
+            {call, ?LINE, {atom, ?LINE, to_json}, [{var, ?LINE, 'Struct'}, {var, ?LINE, 'Options'}]}
+        ]}
+    ]}}.
 
 blank_record(RecName, Fields) ->
-    Defaults = [printable_default(D) || {_,D,_} <- Fields],
-    TupleBits = [RecName | Defaults],
-    Tuple = list_to_tuple(TupleBits),
-    lists:flatten(io_lib:format("~p", [Tuple])).
-
-printable_default({call, _L1, ModFunc, Args}) ->
-    ModFunc2 = printable_modfunc(ModFunc),
-    Args2 = [printable_default(Arg) || Arg <- Args],
-    Args3 = insert_commas(Args2),
-    io_lib:format("~p(~p)", [ModFunc2, Args3]);
-
-printable_default(undefined) ->
-    undefined;
-
-printable_default({record, _L1, RecordName, FieldAssignments}) ->
-    PrintableFieldsList = lists:map(fun({record_field, _L2, {atom, _L3, FieldName}, FieldValue}) ->
-			PrintableVal = printable_default(FieldValue),
-			io_lib:format("~p = ~p", [FieldName, PrintableVal])
-		end, FieldAssignments),
-    PrintableFields = insert_commas(PrintableFieldsList),
-		io_lib:format("#~p{~p}", [RecordName, PrintableFields]);
-
-printable_default({tuple, _L1, ElementList}) ->
-    PrintableElementList = lists:map(fun(Elem) ->
-			printable_default(Elem)
-		end, ElementList),
-		PrintableElements = insert_commas(PrintableElementList),
-		io_lib:format("{~p}", [PrintableElements]);
-
-printable_default({cons, _, _, _} = Cons) ->
-    printable_cons(Cons);
-
-printable_default(Abstract) ->
-    %?log("Abstract printable default: ~p", [Abstract]),
-    erl_parse:normalise(Abstract).
-
-printable_modfunc({remote, _, {atom, _, Mod}, {atom, _, Func}}) ->
-    io_lib:format("~p:~p", [Mod, Func]);
-printable_modfunc({atom, _, Func}) ->
-    io_lib:format("~p", [Func]).
-
-printable_cons({cons, _L1, Head, {nil, _L2}}) ->
-    io_lib:format("[~p]", [printable_default(Head)]);
-
-printable_cons({cons, _L1, Head, {cons, _, _, _} = Tail}) ->
-    TailList = printable_cons(Tail, []),
-    io_lib:format("[~p, ~p]", [printable_default(Head), TailList]);
-
-printable_cons({cons, _L1, Head, Tail}) ->
-    io_lib:format("[~p | ~p]", [printable_default(Head), printable_default(Tail)]).
-
-printable_cons({nil, _L1}, Acc) ->
-    PrintingList = lists:map(fun(Raw) ->
-		    printable_default(Raw)
-		end, lists:reverse(Acc)),
-		insert_commas(PrintingList);
-
-printable_cons({cons, _L1, Head, Tail}, Acc) ->
-    printable_cons(Tail, [Head | Acc]);
-
-printable_cons(Tail, Acc) ->
-    PrintTail = printable_default(Tail),
-		PrintHeadList = lists:map(fun(Raw) ->
-		    printable_default(Raw)
-		end, lists:reverse(Acc)),
-		PrintHead = insert_commas(PrintHeadList),
-		io_lib:format("~p | ~p", [PrintHead, PrintTail]).
-
-insert_commas(List) ->
-    insert_commas(List, []).
-
-insert_commas([], []) ->
-    [];
-insert_commas([Last], Acc) ->
-    lists:reverse([Last, $, | Acc]);
-insert_commas([Head | Tail], Acc) ->
-    Acc2 = [Head, $, | Acc],
-    insert_commas(Tail, Acc2).
+    ValueListSansName = lists:map(fun(FieldRec) ->
+        FieldRec#record_field.default_form
+    end, Fields),
+    ElementList = [{atom, ?LINE, RecName} | ValueListSansName],
+    {tuple, ?LINE, ElementList}.
 
 scrub_keys_func(Fields) ->
-    Func =
-        "scrub_keys(Json) ->"
-        "   scrub_keys(Json, []).",
-    Scrubbing = scrub_keys_func(Fields, []),
-    parse_strings([Func, Scrubbing]).
+    TopScrub = {function, ?LINE, scrub_keys, 1, [
+        {clause, ?LINE, [{var, ?LINE, 'Json'}], [], [
+            {call, ?LINE, {atom, ?LINE, scrub_keys}, [{var, ?LINE, 'Json'}, {nil, ?LINE}]}
+        ]}
+    ]},
+    EndScrubClause = scrub_key_end(),
+    CatchBinClauses = lists:map(fun scrub_key_clause/1, Fields),
+    CatchAtomClause = scrub_key_catch_atom(),
+    CatchAllClause = scrub_key_catch_all(),
+    AllClauses = [EndScrubClause] ++ CatchBinClauses ++ [CatchAtomClause, CatchAllClause],
 
-scrub_keys_func([], Acc) ->
-    Catchall =
-        "scrub_keys([_Head | Tail], Acc) ->"
-        "   scrub_keys(Tail, Acc).",
-    CatchAtom =
-        "scrub_keys([{Key, _} = Head | Tail], Acc) when is_atom(Key) ->"
-        "   scrub_keys(Tail, [Head | Acc])",
-    Ending =
-        "scrub_keys([], Acc) ->"
-        "   lists:reverse(Acc)",
-    Acc2 = [Catchall, CatchAtom | Acc],
-    Acc3 = [Ending | lists:reverse(Acc2)],
-    string:join(Acc3, ";");
+    ScrubKeys = {function, ?LINE, scrub_keys, 2, AllClauses},
 
-scrub_keys_func([{Name, _Default, _Types} | Tail], Acc) ->
-    ClauseStr =
-        "scrub_keys([{<<\"~s\">>, Val} | Tail], Acc) ->"
-        "   scrub_keys(Tail, [{~s, Val} | Acc])",
-    ClauseStr2 = lists:flatten(io_lib:format(ClauseStr, [Name, Name])),
-    scrub_keys_func(Tail, [ClauseStr2 | Acc]).
+    [TopScrub, ScrubKeys].
+
+scrub_key_catch_atom() ->
+    KeyValueMatch = {match, ?LINE, {tuple, ?LINE, [{var, ?LINE, 'Key'}, {var, ?LINE, '_'}]}, {var, ?LINE, 'Head'}},
+    Arg1 = {cons, ?LINE, KeyValueMatch, {var, ?LINE, 'Tail'}},
+    Arg2 = {var, ?LINE, 'Acc'},
+    ArgsList = [Arg1, Arg2],
+    GuardList = [[{call, ?LINE, {atom, ?LINE, is_atom}, [{var, ?LINE, 'Key'}]}]],
+    CallList = [
+        {call, ?LINE, {atom, ?LINE, scrub_keys}, [
+            {var, ?LINE, 'Tail'}, {cons, ?LINE, {var, ?LINE, 'Head'}, {var, ?LINE, 'Acc'}}
+        ]}
+    ],
+    {clause, ?LINE, ArgsList, GuardList, CallList}.
+
+scrub_key_catch_all() ->
+    {clause, ?LINE, [{cons, ?LINE, {var, ?LINE, '_'}, {var, ?LINE, 'Tail'}}, {var, ?LINE, 'Acc'}], [], [
+        {call, ?LINE, {atom, ?LINE, scrub_keys}, [{var, ?LINE, 'Tail'}, {var, ?LINE, 'Acc'}]}
+    ]}.
+
+scrub_key_end() ->
+    {clause, ?LINE, [{nil, ?LINE}, {var, ?LINE, 'Acc'}], [], [
+        {call, ?LINE, {remote, ?LINE, {atom, ?LINE, lists}, {atom, ?LINE, reverse}}, [{var, ?LINE, 'Acc'}]}
+    ]}.
+
+scrub_key_clause(FieldRec) ->
+    NameAsBin = {bin, ?LINE, [
+        {bin_element, ?LINE, {string, ?LINE, atom_to_list(FieldRec#record_field.name) }, default, default}
+    ]},
+    ArgOneHead = {tuple, ?LINE, [NameAsBin, {var, ?LINE, 'Value'}]},
+    ArgOneTail = {var, ?LINE, 'Tail'},
+    ArgOne = {cons, ?LINE, ArgOneHead, ArgOneTail},
+    ArgsList = [ArgOne, {var, ?LINE, 'Acc'}],
+
+    AccOnTop = {cons, ?LINE, {tuple, ?LINE, [{atom, ?LINE, FieldRec#record_field.name}, {var, ?LINE, 'Value'}]}, {var, ?LINE, 'Acc'}},
+    
+    RecursiveCall = {call, ?LINE, {atom, ?LINE, scrub_keys}, [{var, ?LINE, 'Tail'}, AccOnTop]},
+    {clause, ?LINE, ArgsList, [], [RecursiveCall]}.
 
 from_json_arity1_func(RecName, Fields) ->
     BlankTuple = blank_record(RecName, Fields),
-    FromJsonA1Str =
-        "from_json(Json) ->"
-        "   Json2 = scrub_keys(Json),"
-        "   rec2json:from_json(~s, Json2, []).",
-    FromJsonA1Str1 = lists:flatten(io_lib:format(FromJsonA1Str, [BlankTuple])),
-    {ok, FromJsonA1Tokens, _Line} = erl_scan:string(FromJsonA1Str1),
-    erl_parse:parse_form(FromJsonA1Tokens).
+    {ok, {function, ?LINE, from_json, 1, [
+        {clause, ?LINE, [{var, ?LINE, 'Json'}], [], [
+            {match, ?LINE, {var, ?LINE, 'Json2'}, {call, ?LINE, {atom, ?LINE, scrub_keys}, [{var, ?LINE, 'Json'}]}},
+            {call, ?LINE, {remote, ?LINE, {atom, ?LINE, rec2json}, {atom, ?LINE, from_json}}, [BlankTuple, {var, ?LINE, 'Json2'}, {nil, ?LINE}]}
+        ]}
+    ]}}.
 
 from_json_arity2_func(RecName, Fields) ->
     BlankRec = blank_record(RecName, Fields),
-    FromJsonA2Str =
-        "from_json(Json, Opts) when is_list(Json), is_list(Opts)->"
-        "   from_json(~s, Json, Opts);"
-        "from_json(Struct, Json) when is_tuple(Struct) ->"
-        "    from_json(Struct, Json, []);"
-        "from_json(Json, Struct) ->"
-        "   from_json(Struct, Json, []).",
-    FromJsonA2Str1 = lists:flatten(io_lib:format(FromJsonA2Str, [BlankRec])),
-    {ok, FromJsonA2Tokens, _Line} = erl_scan:string(FromJsonA2Str1),
-    erl_parse:parse_form(FromJsonA2Tokens).
+    {ok,{function, ?LINE,from_json,2, [
+        from_json_arity2_clause1(BlankRec),
+        from_json_arity2_clause2(),
+        from_json_arity2_clause3()
+    ]}}.
+  
+from_json_arity2_clause1(BlankRec) ->
+    Args = [{var, ?LINE, 'Json'}, {var, ?LINE, 'Opts'}],
+    Guards = [[
+        {call, ?LINE, {atom, ?LINE, is_list}, [{var, ?LINE, 'Json'}]},
+        {call, ?LINE, {atom, ?LINE, is_list}, [{var, ?LINE, 'Opts'}]}
+    ]],
+    Expressions = [
+        {call, ?LINE, {atom, ?LINE, from_json}, [BlankRec, {var, ?LINE, 'Json'}, {var, ?LINE, 'Opts'}]}
+    ],
+    {clause, ?LINE, Args, Guards, Expressions}.
+
+from_json_arity2_clause2() ->
+    Args = [{var, ?LINE, 'Struct'}, {var, ?LINE, 'Json'}],
+    Guards = [[
+        {call, ?LINE, {atom, ?LINE, is_tuple}, [{var, ?LINE, 'Struct'}]}
+    ]],
+    Expressions = [
+        {call, ?LINE, {atom, ?LINE, from_json}, [{var, ?LINE, 'Struct'}, {var, ?LINE, 'Json'}, {nil, ?LINE}]}
+    ],
+    {clause, ?LINE, Args, Guards, Expressions}.
+  
+from_json_arity2_clause3() ->
+    Args = [{var, ?LINE, 'Json'}, {var, ?LINE, 'Struct'}],
+    Guards = [],
+    Expressions = [
+        {call, ?LINE, {atom, ?LINE, from_json}, [{var, ?LINE, 'Struct'}, {var, ?LINE, 'Json'}, {nil, ?LINE}]}
+    ],
+    {clause, ?LINE, Args, Guards, Expressions}.
 
 from_json_arity3_func() ->
-    FromJsonA3Str =
-        "from_json(Struct, Json, Opts) when is_list(Opts) ->"
-        "    from_json(Json, Opts, Struct);"
-        "from_json(Json, Opts, Struct) ->"
-        "    Json2 = scrub_keys(Json),"
-        "    rec2json:from_json(Struct, Json2, Opts).",
-    {ok, FromJsonA3Tokens, _Line} = erl_scan:string(FromJsonA3Str),
-    erl_parse:parse_form(FromJsonA3Tokens).
+    {ok,{function, ?LINE, from_json,3, [
+        {clause, ?LINE, [{var, ?LINE, 'Struct'},{var, ?LINE, 'Json'},{var, ?LINE, 'Opts'}], [[{call, ?LINE, {atom, ?LINE, is_list},[{var, ?LINE, 'Opts'}]}]], [
+            {call, ?LINE, {atom, ?LINE, from_json}, [{var, ?LINE, 'Json'}, {var, ?LINE, 'Opts'}, {var, ?LINE, 'Struct'}]}
+        ]},
+        {clause, ?LINE, [{var, ?LINE, 'Json'},{var, ?LINE, 'Opts'},{var, ?LINE, 'Struct'}], [], [
+            {match, ?LINE, {var, ?LINE, 'Json2'}, {call, ?LINE, {atom, ?LINE, scrub_keys},[{var, ?LINE, 'Json'}]}},
+            {call, ?LINE, {remote, ?LINE, {atom, ?LINE, rec2json},{atom, ?LINE, from_json}}, [{var, ?LINE, 'Struct'}, {var, ?LINE, 'Json2'}, {var, ?LINE, 'Opts'}]}
+        ]}
+    ]}}.
+
