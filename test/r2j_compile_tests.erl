@@ -778,7 +778,7 @@ prop_r2j_integer_type() ->
             Expected ->
                 try prop_r2j_integer_type:to_json(Rec) of
                     MaybeGood when is_integer(Val) ->
-                       jsx:to_json(Json) == jsx:to_json(MaybeGood);
+                       jsx_to_json:to_json(Json,[]) == jsx_to_json:to_json(MaybeGood,[]);
                     NotGood ->
                         ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
                         false
@@ -811,7 +811,7 @@ prop_r2j_integer_min_max_type() ->
             Expected ->
                 try prop_r2j_integer_min_max_type:to_json(Rec) of
                     MaybeGood when is_integer(Val), -100 =< Val, Val =< 100 ->
-                        jsx:to_json(Json) == jsx:to_json(MaybeGood);
+                        jsx_to_json:to_json(Json,[]) == jsx_to_json:to_json(MaybeGood,[]);
                     NotGood ->
                         ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
                         false
@@ -855,7 +855,7 @@ prop_r2j_min_max_listed() ->
             Expected ->
                 try prop_r2j_integer_min_max_listed:to_json(Rec) of
                     Good when IsGoodValue ->
-                        jsx:to_json(Json) == jsx:to_json(Good);
+                        jsx_to_json:to_json(Json,[]) == jsx_to_json:to_json(Good,[]);
                     NotGood ->
                         ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
                         false
@@ -879,7 +879,7 @@ prop_r2j_type_translation() ->
         Json = [{<<"p">>, [{<<"x">>, X}, {<<"y">>, Y}]}],
         Rec = {type_translation, RecVal},
         Got = type_translation:from_json(Json),
-        {ok, Rec} == Got andalso jsx:to_json(Json) == jsx:to_json(type_translation:to_json(Rec))
+        {ok, Rec} == Got andalso jsx_to_json:to_json(Json,[]) == jsx_to_json:to_json(type_translation:to_json(Rec),[])
     end).
 
 fold_ind(Fun, Acc, List) ->
