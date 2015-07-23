@@ -218,7 +218,7 @@ maybe_convertable(_Value, [], _Options) ->
 
 maybe_convertable(Value, [{Mod, Func, Args} | Types], Options) ->
     Arity = length(Args) + 1,
-    code:ensure_loaded(Mod),
+    {module, _} = code:ensure_loaded(Mod),
     case erlang:function_exported(Mod, Func, Arity) of
         true ->
             case erlang:apply(Mod, Func, [Value | Args]) of
