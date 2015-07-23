@@ -5,3 +5,4 @@ logs
 *.swo
 .eunit
 test/*.beam
+.local_dialyzer_plt
