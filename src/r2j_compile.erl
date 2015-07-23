@@ -89,7 +89,7 @@ output([], _OutputDir) ->
 output([Module | Tail], OutputDir) ->
     {ok, ModName, Bin, _Warnings} = compile:forms(Module, [return]),
     File = filename:join(OutputDir, atom_to_list(ModName) ++ ".beam"),
-    file:write_file(File, Bin),
+    ok = file:write_file(File, Bin),
     output(Tail, OutputDir).
 
 analyze_forms(Forms, Params) ->
@@ -180,7 +180,7 @@ extract_types([], Acc) ->
             {specific, Acc}
     end;
 extract_types([{type, _L1, union, Types} | Tail], Acc) ->
-    Acc2 = extract_types(Types, Acc),
+    {_Specificness, Acc2} = extract_types(Types, Acc),
     extract_types(Tail, Acc2);
 extract_types([{type, _L1, list, ListTypes} | Tail], Acc) ->
     ListTypes2 = extract_types(ListTypes),
@@ -207,6 +207,8 @@ extract_types([{remote_type, _L1, [{atom,_L2,Module},{atom,_L3,Function},Args]} 
         _:_ ->
             extract_types(Tail, Acc)
     end;
+extract_types([{user_type, _, _, _} | Tail], Acc) ->
+    extract_types(Tail, Acc);
 extract_types([Type | Tail], Acc) ->
     Acc2 = [erl_parse:normalise(Type) | Acc],
     extract_types(Tail, Acc2).
