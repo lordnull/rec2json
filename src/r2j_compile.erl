@@ -207,6 +207,8 @@ extract_types([{remote_type, _L1, [{atom,_L2,Module},{atom,_L3,Function},Args]} 
         _:_ ->
             extract_types(Tail, Acc)
     end;
+extract_types([{user_type, _, _, _} | Tail], Acc) ->
+    extract_types(Tail, Acc);
 extract_types([Type | Tail], Acc) ->
     Acc2 = [erl_parse:normalise(Type) | Acc],
     extract_types(Tail, Acc2).
