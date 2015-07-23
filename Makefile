@@ -23,3 +23,5 @@ testclean:
 DIALYZER_APPS = kernel stdlib syntax_tools compiler
 
 include tools.mk
+
+test_all: test dialyzer
