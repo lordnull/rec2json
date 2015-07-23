@@ -20,10 +20,6 @@ TEST_LOG_FILE := eunit.log
 testclean:
 	@rm -f $(TEST_LOG_FILE)
 
-eunit: clean deps compile
-	./rebar eunit skip_deps=true
+DIALYZER_APPS = kernel stdlib syntax_tools compiler
 
-# Test each dependency individually in its own VM
-test: deps compile testclean
-	./rebar eunit skip_deps=true
-
+include tools.mk
