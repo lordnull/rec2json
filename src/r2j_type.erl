@@ -3,10 +3,15 @@
 -module(r2j_type).
 
 -export([integer/1, pos_integer/1, non_neg_integer/1, neg_integer/1, float/1,
-    number/1, boolean/1, binary/1]).
+    number/1, boolean/1, binary/1, atom/1]).
 -export([integer/3, atom/2]).
 -export([string/2]).
 
+
+atom(N) when is_binary(N) ->
+    {ok, list_to_atom(binary_to_list(N))};
+atom(N) ->
+    {ok, N}.
 
 integer(N) when is_integer(N) ->
     {ok, N};
