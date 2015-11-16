@@ -48,10 +48,22 @@ parse_transform(RawForms, Options) ->
             SimpleFields = r2j_compile:simplify_fields(Record),
             {ok, AdditionalExports} = r2j_compile:export_declaration(SimpleFields, Params),
             {ok, Functions} = r2j_compile:additional_funcs(ModuleName, SimpleFields, Params),
-            insert_new_bits(Forms, AdditionalExports, Functions, Params);
+            WithNewBits = insert_new_bits(Forms, AdditionalExports, Functions, Params),
+            lists:map(fun maybe_normalize_record_def/1, WithNewBits);
         _Records ->
             Forms
     end.
+
+maybe_normalize_record_def({attribute, Line, record, {RecordName, RecordFields}} = Form) ->
+    case epp:normalize_typed_record_fields(RecordFields) of
+        not_typed ->
+            Form;
+        {typed, NewFields} ->
+            {attribute, Line, record, {RecordName, NewFields}}
+    end;
+
+maybe_normalize_record_def(Form) ->
+    Form.
 
 insert_new_bits(Forms, AllNewExports, AllNewFunctions, Params) ->
     EofSplit = fun
