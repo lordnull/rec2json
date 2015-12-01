@@ -12,7 +12,9 @@
 	typed_field = {1} :: rec2json_tests:int_tuple(),
 	untyped_field = 3,
 	missing_type = undefined :: nomod:nofun(),
-	float_field = 1.0 :: float()
+	float_field = 1.0 :: float(),
+	rec_field :: #sub_rec{},
+	rec_field_list = [] :: [#sub_rec{}]
 }).
 
 -type int_tuple() :: any().
@@ -39,7 +41,7 @@ feature_test_() -> [
 
 		{"does to_json conversion correctly", fun() ->
 			Rec = #rec2json_tests{typed_field = {2, 3, 4}, untyped_field = <<"hi">>},
-			Expected = [{typed_field, [2, 3, 4]}, {untyped_field, <<"hi">>}, {float_field, 1.0}],
+			Expected = [{typed_field, [2, 3, 4]}, {untyped_field, <<"hi">>}, {float_field, 1.0}, {rec_field_list, []}],
 			Got = ?MODULE:to_json(Rec),
 			?assertEqual(Expected, Got)
 		end},
@@ -49,6 +51,24 @@ feature_test_() -> [
 			Expected = #rec2json_tests{typed_field = {4, 3, 2}, untyped_field = <<"bye">>},
 			Got = ?MODULE:from_json(Json),
 			?assertEqual({ok, Expected}, Got)
+		end},
+
+		{"skips over non-rec2json records", fun() ->
+			Json = [{rec_field_list, [
+				[{f, 1}],
+				[{f, 2}],
+				[{f, 3}]
+			]}],
+			Expected = #rec2json_tests{rec_field_list = [[{f, 1}], [{f, 2}], [{f, 3}]]},
+			% we still get warnings because the type spec of the list does not
+			% have a valid type that matches the json (like any()).
+			ExpectedWarnings = [
+				[rec_field_list, 1],
+				[rec_field_list, 2],
+				[rec_field_list, 3]
+			],
+			Got = ?MODULE:from_json(Json),
+			?assertEqual({ok, Expected, ExpectedWarnings}, Got)
 		end},
 
 		{"can to_json with types loads needed module", fun() ->
