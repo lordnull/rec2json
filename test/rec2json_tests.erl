@@ -71,6 +71,13 @@ feature_test_() -> [
 			?assertEqual({ok, Expected, ExpectedWarnings}, Got)
 		end},
 
+		{"if a field is skipped, don't bother to verify it's type", fun() ->
+			Record = #rec2json_tests{rec_field_list = {not_valid}},
+			Expected = [{typed_field, [1]}, {untyped_field, 3}, {float_field, 1.0}],
+			Got = ?MODULE:to_json([rec_field_list], Record),
+			?assertEqual(Expected, Got)
+		end},
+
 		{"can to_json with types loads needed module", fun() ->
 			code:delete(r2j_type),
 			code:purge(r2j_type),

@@ -126,7 +126,12 @@ to_json(Tuple, Options) when is_tuple(Tuple) ->
     {TreatUndef, Transforms} = extract_to_json_opts(Options),
     [Module | Values] = tuple_to_list(Tuple),
     Types = Module:field_types(),
-    Zipped = lists:zip(Values, Types),
+    ZippedFull = lists:zip(Values, Types),
+    SkippingFields = lists:filter(fun erlang:is_atom/1, Transforms),
+    Zipped = lists:filter(fun(Elem) ->
+        {_Value, {Name, _FTypes}} = Elem,
+        not lists:member(Name, SkippingFields)
+    end, ZippedFull),
     {TreatUndef, ReversedJsonProps} = lists:foldl(fun
         ({undefined, {_Name, _FTypes}}, {skip, Acc}) ->
             {skip, Acc};
