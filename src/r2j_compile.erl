@@ -186,6 +186,14 @@ extract_types([{type, _L1, list, ListTypes} | Tail], Acc) ->
     ListTypes2 = extract_types(ListTypes),
     Acc2 = [{list, ListTypes2} | Acc],
     extract_types(Tail, Acc2);
+% when a rocord field has a type defined as list(#record{}), the resulting
+% type is {type, L, list, [{type, L, record, [RecordName]}]}, instead of the
+% usual {type, L, record, RecordName}.
+extract_types([{type, _L1, record, [{atom, _L2, RecordName}]} | Tail], Acc) ->
+    % no way to know if it's a rec2json compiled record, so we'll just go with
+    % it. If it's not (no to/from json), there's a catch for undef in the 
+    % rec2json module.
+    extract_types(Tail, [{record, RecordName} | Acc]);
 extract_types([{type, _L1, Type, TypeArgs} | Tail], Acc) ->
     % most likely not a good idea
     case supported_type(Type, TypeArgs) of
