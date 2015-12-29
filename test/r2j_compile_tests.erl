@@ -285,13 +285,13 @@ feature_test_() ->
         {"To json, sub record encoded as empty obj", fun() ->
             IncRec = #included{},
             Record = #feature{default = undefined, default_integer = undefined, record_type = IncRec},
-            ?assertEqual([{record_type, [{}]}], Record:to_json())
+            ?assertEqual([{record_type, [{}]}], Record:to_json([included_records]))
         end},
 
         {"To json, sub record fully encoded", fun() ->
             IncRec = #included{field = <<"field">>},
             Record = #feature{default = undefined, default_integer = undefined, record_type = IncRec},
-            ?assertEqual([{record_type, [{field, <<"field">>}]}], Record:to_json())
+            ?assertEqual([{record_type, [{field, <<"field">>}]}], Record:to_json([included_records]))
         end},
 
         {"To json, atom becomes binary", fun() ->
@@ -401,6 +401,18 @@ feature_test_() ->
             ?assertEqual({ok, Expected}, feature:from_json(Json))
         end},
 
+        {"from json with a list of included records", fun() ->
+            Expected = #feature{included_records = [
+                #included{field = 1},
+                #included{field = 2}
+            ]},
+            Json = [{included_records, [
+                [{field, 1}],
+                [{field, 2}]
+            ]}],
+            ?assertEqual({ok, Expected}, feature:from_json(Json))
+        end},
+
         {"from json with type mismatch:  integer", fun() ->
             Expected = #feature{integer_type = <<"hi">>},
             Json = [{integer_type, <<"hi">>}],
@@ -489,7 +501,8 @@ feature_test_() ->
                 {specific, [undefined, {r2j_type, integer, []}, {r2j_type, boolean, []}]},
                 {specific, [undefined, {r2j_type, pos_integer, []}]},
                 {specific, [undefined, init, ready, steady]},
-                {specific, [undefined, {r2j_type, integer, [-100, 100]}]}
+                {specific, [undefined, {r2j_type, integer, [-100, 100]}]},
+                {specific, [{list, {specific, [{record, included}]}}]}
             ],
             Zipped = lists:zip(Fields, Types),
             ?assertEqual(length(Zipped), length(Got)),
