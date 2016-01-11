@@ -270,6 +270,7 @@ Currently defined types checked:
 * [supported_type()]
 * #record{} when record has record:from_json/2 exported
 * atom()
+* specify atom, 'atom' | 'another' | ...
 * null when converting to undefined or back
 
 ### User defined types
