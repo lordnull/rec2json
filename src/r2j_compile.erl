@@ -223,7 +223,7 @@ extract_types([Type | Tail], Acc) ->
 
 supported_type(Type, []) ->
     Supported = [integer, pos_integer, non_neg_integer, neg_integer, float,
-        number, boolean, binary],
+        number, boolean, binary, atom],
     case lists:member(Type, Supported) of
         true ->
             {r2j_type, Type, []};

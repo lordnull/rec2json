@@ -269,7 +269,8 @@ Currently defined types checked:
 * binary()
 * [supported_type()]
 * #record{} when record has record:from_json/2 exported
-* atom (note it is not atom())
+* atom()
+* specify atom, 'atom' | 'another' | ...
 * null when converting to undefined or back
 
 ### User defined types
