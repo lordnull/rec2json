@@ -3,9 +3,14 @@
 -module(r2j_type).
 
 -export([integer/1, pos_integer/1, non_neg_integer/1, neg_integer/1, float/1,
-    number/1, boolean/1, binary/1]).
+    number/1, boolean/1, binary/1, unsafe_atom/1]).
 -export([integer/3, atom/2]).
 -export([string/2]).
+
+-type unsafe_atom() :: atom().
+-export_types([
+    unsafe_atom/0
+]).
 
 
 integer(N) when is_integer(N) ->
@@ -81,3 +86,17 @@ string(Str, Len) when is_binary(Str), size(Str) =< Len ->
 string(_Str, _Len) ->
     error.
 
+%% @doc Translation for any atom at all. This is marked as unsafe because if
+%% the json to decode is taken from an untrusted source, and you use this type
+%% on a field, that untrusted source could fill up your atom table. Atoms are
+%% not garbage collected, ever, so the untrusted source could also fill up your
+%% systems memory. Even a trusted source can go wonky. As such, think long and
+%% hard before you go ahead an use this.
+unsafe_atom(Atom) when is_atom(Atom) ->
+    {ok, atom_to_binary(Atom, utf8)};
+
+unsafe_atom(Binary) when is_binary(Binary) ->
+    {ok, binary_to_atom(Binary, utf8)};
+
+unsafe_atom(_Else) ->
+    error.
