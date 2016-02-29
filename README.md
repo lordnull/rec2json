@@ -269,8 +269,17 @@ Currently defined types checked:
 * binary()
 * [supported_type()]
 * #record{} when record has record:from_json/2 exported
-* atom (note it is not atom())
+* atom (note it is not atom())*
 * null when converting to undefined or back
+
+The type `atom()` is not supported because a primary use case for rec2json
+is to convert untrusted data, such as an http post request. Converting
+untrusted data into atoms can exhaust the erlang vm's atom table, or worse
+exhaust the machine's memory. Rec2json is, by default, safe.
+
+It is still possilbe to apply a type to a record field so that json strings
+will be converted to the equivalent atom using either a user defined type,
+or the provied `r2j_type:unsafe_atom()` type.
 
 ### User defined types
 
