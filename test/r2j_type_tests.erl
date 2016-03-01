@@ -83,4 +83,18 @@ prop_float() ->
         Expected == Got
     end).
 
+prop_unsafe_atom() ->
+    ?FORALL(Val, oneof([<<"bin1">>, <<"bin2">>, 1, 2.0]),
+    begin
+        Expected = if
+            is_binary(Val) ->
+                {ok, binary_to_atom(Val, utf8)};
+            true ->
+                error
+        end,
+        Got = r2j_type:unsafe_atom(Val),
+        Expected == Got
+    end).
+
+
 -endif.
