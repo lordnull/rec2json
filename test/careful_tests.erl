@@ -4,7 +4,7 @@
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
--export([to_json/1]).
+-export([to_json/1, careful_tests/1]).
 
 -record(careful_tests, {
 	one_field
@@ -22,5 +22,11 @@ is_careful_test() -> ?assert(true).
 to_json_test() ->
 	Rec = #careful_tests{one_field = <<"yo">>},
 	?assertEqual([{}], to_json(Rec)).
+
+careful_tests(Value) ->
+	{ok, ok, Value}.
+
+use_careful_tests_function_test() ->
+	?assertEqual({ok, ok, <<"data">>}, careful_tests(<<"data">>)).
 
 -endif.
