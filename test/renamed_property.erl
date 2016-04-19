@@ -1,6 +1,6 @@
 -module(renamed_property).
 -compile({parse_transform, rec2json}).
--rec2json({property_name, goober}).
+-rec2json({type_name, goober}).
 
 -record(renamed_property, {
 	f1 = 42 :: pos_integer(),

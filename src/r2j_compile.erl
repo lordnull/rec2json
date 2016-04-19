@@ -249,21 +249,21 @@ create_module(RecordName, Fields, Params) ->
     [ModuleDeclaration, ExportDeclaration] ++ NewFunctions.
 
 type_declaration(RecordName, Params) ->
-    case proplists:get_value(generate_property, Params, true) of
+    case proplists:get_value(generate_type, Params, true) of
         false ->
             {ok, []};
         true ->
-            PropertyName = proplists:get_value(property_name, Params, RecordName),
+            PropertyName = proplists:get_value(type_name, Params, RecordName),
             Attr = {attribute, 1, type, {PropertyName, {type, 1, record, [{atom, 1, RecordName}]},[]}},
             {ok, [Attr]}
     end.
 
 export_type_declaration(RecordName, Params) ->
-    case proplists:get_value(generate_property, Params, true) of
+    case proplists:get_value(generate_type, Params, true) of
         false ->
             {ok, []};
         true ->
-            PropertyName = proplists:get_value(property_name, Params, RecordName),
+            PropertyName = proplists:get_value(type_name, Params, RecordName),
             Attr = {attribute, 1, export_type, [{PropertyName, 0}]},
             {ok, [Attr]}
     end.
@@ -279,10 +279,10 @@ additional_funcs(RecordName, Fields, Params) ->
         true -> setter_funcs(Fields);
         false -> []
     end,
-    GenerateProperty = proplists:get_value(generate_property, Params, true),
+    GenerateProperty = proplists:get_value(generate_type, Params, true),
     Converter = case GenerateProperty of
         true ->
-            ProperyName = proplists:get_value(property_name, Params, RecordName),
+            ProperyName = proplists:get_value(type_name, Params, RecordName),
             [converter_func(RecordName, ProperyName, length(Fields))];
         false -> []
     end,
@@ -326,10 +326,10 @@ export_declaration(RecordName, Fields, Params) ->
         true -> lists:map(fun setter_export_declaration/1, Fields);
         false -> []
     end,
-    GenerateProperty = proplists:get_value(generate_property, Params, true),
+    GenerateProperty = proplists:get_value(generate_type, Params, true),
     Converter = case GenerateProperty of
         true ->
-            PropertyName = proplists:get_value(property_name, Params, RecordName),
+            PropertyName = proplists:get_value(type_name, Params, RecordName),
             [{PropertyName, 1}];
         false -> []
     end,
