@@ -52,7 +52,14 @@ used as a paramterized module, making it simple to use with the
 
 Options are passed to the rec2json parse transform through compile options.
 The parse transform checks for the key 'rec2json' in the compile options.
-The value is expected to be a proplist. Options are:
+The value is expected to be a proplist. 
+
+Options can also be passed in on a per-module basis by adding one or more
+`rec2json` module attributes. A `rec2json` module attribute can either be a
+tuple for one option, or a list of option tuples. They all get mashed together.
+Using the same option more than once has undefined behavior.
+
+Options are:
 
 <table>
   <tr>
