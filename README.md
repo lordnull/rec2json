@@ -83,6 +83,17 @@ rec2json's parse transform avoid altering or adding functions that are
 already defined in the module. This means you can override the default
 to_json/1 function to call to_json/2 with a specific set of options.</td>
 	</tr>
+    <tr>
+        <td>generate_property</td> <td>true : boolean()</td> <td> If set to
+true, a type is generated for the record, and that type is exported. In
+addition, a function is generated so that other rec2json records using the
+exported type work as expected</td>
+    </tr>
+    <tr>
+        <td>property_name</td> <td> ?MODULE : atom()</td> <td> If
+generate_property is true, this changes the type name and the function name for
+the conversion function.</td>
+    </tr>
 </table>
 
 The given examples use the following record and record defintion:
