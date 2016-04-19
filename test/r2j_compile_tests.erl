@@ -97,11 +97,7 @@ types_gen([{Nth, Type} | Tail]) ->
     {generator, fun() -> [{Type, Test} | {generator, Generator}] end}.
 
 parse_transform_test_() ->
-    {setup, fun() ->
-        ok
-    end, fun(_) ->
-        ok
-    end, fun(_) -> [
+    [
 
         {"compile", fun() ->
             Got = compile:file("../test/test_rec"),
@@ -204,9 +200,43 @@ parse_transform_test_() ->
         {"has to/from json", fun() ->
             ?assert(erlang:function_exported(test_person, to_json, 1)),
             ?assert(erlang:function_exported(test_person, from_json, 1))
+        end},
+
+        {"has default conversion function", fun() ->
+            Exported = default_property:module_info(exports),
+            ?assert(lists:member({default_property, 1}, Exported))
+        end},
+
+        {"default property conversion works as expected", fun() ->
+            InitialJson = [{}],
+            {ok, Record} = default_property:default_property(InitialJson),
+            1 = default_property:f1(Record),
+            <<"hi">> = default_property:f2(Record),
+            EmptyRec = default_property:f1(undefined, default_property:f2(undefined, Record)),
+            {ok, [{}]} = default_property:default_property(EmptyRec)
+        end},
+
+        {"property name can be altered", fun() ->
+            Exported = renamed_property:module_info(exports),
+            ?assert(lists:member({goober, 1}, Exported))
+        end},
+
+        {"renamed property works like default", fun() ->
+            InitialJson = [{}],
+            {ok, Record} = renamed_property:goober(InitialJson),
+            42 = renamed_property:f1(Record),
+            hello = renamed_property:f2(Record),
+            EmptyRec = renamed_property:f1(undefined, renamed_property:f2(undefined, Record)),
+            {ok, [{}]} = renamed_property:goober(EmptyRec)
+
+        end},
+
+        {"property creation suppressed", fun() ->
+            Exported = suppress_property:module_info(exports),
+            ?assertNot(lists:member({suppress_property, 1}, Exported))
         end}
 
-    ] end}.
+    ].
 
 feature_test_() ->
     {setup, fun() ->

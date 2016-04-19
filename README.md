@@ -52,7 +52,14 @@ used as a paramterized module, making it simple to use with the
 
 Options are passed to the rec2json parse transform through compile options.
 The parse transform checks for the key 'rec2json' in the compile options.
-The value is expected to be a proplist. Options are:
+The value is expected to be a proplist. 
+
+Options can also be passed in on a per-module basis by adding one or more
+`rec2json` module attributes. A `rec2json` module attribute can either be a
+tuple for one option, or a list of option tuples. They all get mashed together.
+Using the same option more than once has undefined behavior.
+
+Options are:
 
 <table>
   <tr>
@@ -76,6 +83,17 @@ rec2json's parse transform avoid altering or adding functions that are
 already defined in the module. This means you can override the default
 to_json/1 function to call to_json/2 with a specific set of options.</td>
 	</tr>
+    <tr>
+        <td>generate_type</td> <td>true : boolean()</td> <td> If set to
+true, a type is generated for the record, and that type is exported. In
+addition, a function is generated so that other rec2json records using the
+exported type work as expected</td>
+    </tr>
+    <tr>
+        <td>type_name</td> <td> ?MODULE : atom()</td> <td> If generate_type is
+true, this changes the type name and the function name for the conversion
+function.</td>
+    </tr>
 </table>
 
 The given examples use the following record and record defintion:
