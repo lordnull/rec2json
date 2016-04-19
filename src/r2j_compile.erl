@@ -15,7 +15,8 @@
 -module(r2j_compile).
 
 -export([scan_file/2, scan_string/2]).
--export([simplify_fields/1, export_declaration/1, export_declaration/2, additional_funcs/3]).
+-export([simplify_fields/1]).
+-export([type_declaration/2, export_type_declaration/2, export_declaration/2, export_declaration/3, additional_funcs/3]).
 
 -record(record_field, {
     name, name_form,
@@ -241,12 +242,31 @@ supported_type(_,_) ->
 
 create_module(RecordName, Fields, Params) ->
     {ok, ModuleDeclaration} = module_declaration(RecordName),
-    {ok, ExportDeclaration} = export_declaration(Fields, Params),
+    {ok, Type} = type_declaration(RecordName, Params),
+    {ok, ExportType} = export_type_declaration(RecordName, Params),
+    {ok, ExportDeclaration} = export_declaration(RecordName, Fields, Params),
     {ok, NewFunctions} = additional_funcs(RecordName, Fields, Params),
     [ModuleDeclaration, ExportDeclaration] ++ NewFunctions.
 
-%additional_funcs(RecordName, Fields) ->
-%    additional_funcs(RecordName, Fields, []).
+type_declaration(RecordName, Params) ->
+    case proplists:get_value(generate_property, Params, true) of
+        false ->
+            {ok, []};
+        true ->
+            PropertyName = proplists:get_value(property_name, Params, RecordName),
+            Attr = {attribute, 1, type, {PropertyName, {type, 1, record, [{atom, 1, RecordName}]},[]}},
+            {ok, [Attr]}
+    end.
+
+export_type_declaration(RecordName, Params) ->
+    case proplists:get_value(generate_property, Params, true) of
+        false ->
+            {ok, []};
+        true ->
+            PropertyName = proplists:get_value(property_name, Params, RecordName),
+            Attr = {attribute, 1, export_type, [{PropertyName, 0}]},
+            {ok, [Attr]}
+    end.
 
 additional_funcs(RecordName, Fields, Params) ->
     GenerateAccessors = proplists:get_value(generate_accessors, Params, true),
@@ -257,6 +277,13 @@ additional_funcs(RecordName, Fields, Params) ->
     GenerateSetters = proplists:get_value(generate_setters, Params, true),
     SetterFuncs = case GenerateSetters of
         true -> setter_funcs(Fields);
+        false -> []
+    end,
+    GenerateProperty = proplists:get_value(generate_property, Params, true),
+    Converter = case GenerateProperty of
+        true ->
+            ProperyName = proplists:get_value(property_name, Params, RecordName),
+            [converter_func(RecordName, ProperyName, length(Fields))];
         false -> []
     end,
     {ok, FieldListFunc} = get_field_names_func(Fields),
@@ -272,6 +299,7 @@ additional_funcs(RecordName, Fields, Params) ->
         ++ SetterFuncs
         ++ [FieldListFunc]
         ++ [TypeListFunc]
+        ++ Converter
         ++ [ToJsonA1]
         ++ [ToJsonA2]
         ++ [FromJsonA1]
@@ -283,10 +311,10 @@ additional_funcs(RecordName, Fields, Params) ->
 module_declaration(Name) ->
     {ok, {attribute, 1, module, Name}}.
 
-export_declaration(Fields) ->
-    export_declaration(Fields, []).
+export_declaration(RecordName, Fields) ->
+    export_declaration(RecordName, Fields, []).
 
-export_declaration(Fields, Params) ->
+export_declaration(RecordName, Fields, Params) ->
     Line = proplists:get_value(line, Params, 1),
     GenerateAccessors = proplists:get_value(generate_accessors, Params, true),
     FieldDecs = case GenerateAccessors of
@@ -298,8 +326,15 @@ export_declaration(Fields, Params) ->
         true -> lists:map(fun setter_export_declaration/1, Fields);
         false -> []
     end,
+    GenerateProperty = proplists:get_value(generate_property, Params, true),
+    Converter = case GenerateProperty of
+        true ->
+            PropertyName = proplists:get_value(property_name, Params, RecordName),
+            [{PropertyName, 1}];
+        false -> []
+    end,
     Decs = [{field_names, 0}, {field_types, 0}, {to_json, 1}, {to_json, 2},
-        {from_json, 1}, {from_json, 2}, {from_json, 3}] ++ FieldDecs ++
+        {from_json, 1}, {from_json, 2}, {from_json, 3}] ++ Converter ++ FieldDecs ++
         SetFieldDecs,
     {ok, {attribute, Line, export, Decs}}.
 
@@ -314,6 +349,27 @@ getter_funcs(Fields) ->
     Ns = lists:seq(2, EndSeq),
     Zipped = lists:zip(Ns, Fields),
     lists:map(fun getter_func/1, Zipped).
+
+converter_func(RecordName, PropertyName, NumFields) ->
+    {function,?LINE,PropertyName,1, [
+        {clause,?LINE, [{var,?LINE,'Input'}], [], [
+            {'case',?LINE, {call,?LINE, {remote,?LINE,{atom,?LINE,rec2json},{atom,?LINE,is_json_object}}, [{var,?LINE,'Input'}]}, [
+                {clause,?LINE, [{atom,?LINE,true}], [], [
+                    {call,?LINE,{atom,?LINE,from_json},[{var,?LINE,'Input'}]}
+                ]},
+                {clause,?LINE, [{atom,?LINE,false}], [], [
+                    {'case',?LINE, {call,?LINE, {remote,?LINE,{atom,?LINE,rec2json},{atom,?LINE,is_record}}, [{var,?LINE,'Input'}, {atom,?LINE,RecordName}, {integer,?LINE,NumFields + 1}]}, [
+                        {clause,?LINE, [{atom,?LINE,true}], [], [
+                            {tuple, ?LINE, [{atom, ?LINE, ok}, {call,?LINE,{atom,?LINE,to_json},[{var,?LINE,'Input'}]}]}
+                        ]},
+                        {clause,?LINE, [{atom,?LINE,false}], [], [
+                            {atom,?LINE,error}
+                        ]}
+                    ]}
+                ]}
+            ]}
+        ]}
+    ]}.
 
 getter_func({ElementN, FieldRec}) ->
     {function, ?LINE, FieldRec#record_field.name, 1, [

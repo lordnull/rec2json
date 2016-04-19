@@ -27,16 +27,15 @@
 -export([verify_type/5, verify_types/5]).
 -export([to_json/1, to_json/2]).
 -export([from_json/3]).
+-export([is_json_object/1, is_record/3]).
 
 %% ---------------------------------------------------------------------------
 %% parse transform
 %% ---------------------------------------------------------------------------
 
 parse_transform(RawForms, Options) ->
-    Params = case proplists:get_value(rec2json, Options) of
-        undefined -> [];
-        P -> P
-    end,
+    PassedInParams = proplists:get_value(rec2json, Options, []),
+    Params = lists:foldl(fun extract_param/2, PassedInParams, RawForms),
     %% always kinda icky to use an undocumented function.
     %% however, without this, the abstract record forms passed in lack the
     %% type information needed for user defined types to work properly.
@@ -46,13 +45,22 @@ parse_transform(RawForms, Options) ->
     case MaybeRecords of
         [Record] ->
             SimpleFields = r2j_compile:simplify_fields(Record),
-            {ok, AdditionalExports} = r2j_compile:export_declaration(SimpleFields, Params),
+            {ok, AdditionalExports} = r2j_compile:export_declaration(ModuleName, SimpleFields, Params),
+            {ok, Types} = r2j_compile:type_declaration(ModuleName, Params),
+            {ok, TypeExports} = r2j_compile:export_type_declaration(ModuleName, Params),
             {ok, Functions} = r2j_compile:additional_funcs(ModuleName, SimpleFields, Params),
-            WithNewBits = insert_new_bits(Forms, AdditionalExports, Functions, Params),
+            WithNewBits = insert_new_bits(Forms, AdditionalExports, Types, TypeExports, Functions, Params),
             lists:map(fun maybe_normalize_record_def/1, WithNewBits);
         _Records ->
             Forms
     end.
+
+extract_param({attribute, _Line, rec2json, Option}, Acc) when is_list(Option) ->
+    Option ++ Acc;
+extract_param({attribute, _Line, rec2json, Option}, Acc) ->
+    [Option | Acc];
+extract_param(_, Acc) ->
+    Acc.
 
 maybe_normalize_record_def({attribute, Line, record, {RecordName, RecordFields}} = Form) ->
     case epp:normalize_typed_record_fields(RecordFields) of
@@ -65,7 +73,7 @@ maybe_normalize_record_def({attribute, Line, record, {RecordName, RecordFields}}
 maybe_normalize_record_def(Form) ->
     Form.
 
-insert_new_bits(Forms, AllNewExports, AllNewFunctions, Params) ->
+insert_new_bits(Forms, AllNewExports, AllNewTypes, AllNewTypeExports, AllNewFunctions, Params) ->
     EofSplit = fun
         ({eof, _}) -> false;
         (_) -> true
@@ -84,14 +92,14 @@ insert_new_bits(Forms, AllNewExports, AllNewFunctions, Params) ->
     end,
     {NoEof, Eof} = lists:splitwith(EofSplit, Forms),
     {UpToFunctions, OrigFunctions} = lists:splitwith(FunctionsSplit, NoEof),
-    {UpToExport, ExportAndFunctions} = lists:splitwith(ExportSplit, UpToFunctions),
-    {Exports, Functions} = case proplists:get_value(careful, Params, true) of
+    {UpToExport, ExportAndPreFunctions} = lists:splitwith(ExportSplit, UpToFunctions),
+    {Exports, Types, ExportTypes, Functions} = case proplists:get_value(careful, Params, true) of
         false ->
-            {AllNewExports, AllNewFunctions};
+            {AllNewExports, AllNewTypes, AllNewTypeExports, AllNewFunctions};
         true ->
-            {careful_exports(AllNewExports, Forms), careful_functions(AllNewFunctions, Forms)}
+            {careful_exports(AllNewExports, Forms), careful_type_decl(AllNewTypes, Forms), careful_type_exports(AllNewTypeExports, Forms), careful_functions(AllNewFunctions, Forms)}
     end,
-    UpToExport ++ [Exports] ++ ExportAndFunctions ++ Functions ++ OrigFunctions ++ Eof.
+    UpToExport ++ [Exports] ++ ExportAndPreFunctions ++ Types ++ ExportTypes ++ Functions ++ OrigFunctions ++ Eof.
 
 careful_exports(NewExportDecl, AllForms) ->
     {attribute, Line, export, NewExports} = NewExportDecl,
@@ -114,6 +122,50 @@ careful_functions(NewFunctions, AllForms) ->
     lists:filter(fun({function, _Line, Name, Arity, _Clauses}) ->
         not lists:member({Name, Arity}, ExistingFuncs)
     end, NewFunctions).
+
+careful_type_exports([], _) ->
+    [];
+    
+careful_type_exports(NewTypeExportDecl, AllForms) ->
+    [{attribute, Line, export_type, NewExports}] = NewTypeExportDecl,
+    OrigDecl = lists:foldl(fun
+        ({attribute, _, export_type, Exp}, Acc) ->
+            Exp ++ Acc;
+        (_, Acc) ->
+            Acc 
+    end, [], AllForms),
+    SafeExports = NewExports -- OrigDecl,
+    [{attribute, Line, export_type, SafeExports}].
+
+careful_type_decl([], _) ->
+    [];
+
+careful_type_decl(NewTypeDecl, AllForms) ->
+    [{attribute,_,type, {TypeName, _TypeDef, []}}] = NewTypeDecl,
+    SameTypeCheck = fun
+        ({attribute, _, type, {Exists, _, []}}) when TypeName =:= Exists ->
+            true;
+        (_) ->
+            false
+    end,
+    case lists:any(SameTypeCheck, AllForms) of
+        true ->
+            [];
+        false ->
+            NewTypeDecl
+    end.
+
+is_json_object([{}]) ->
+    true;
+is_json_object(List) when is_list(List), length(List) >= 1 ->
+    lists:all(fun({K, Y}) -> true; (_) -> false end, List);
+is_json_object(_) ->
+    false.
+
+is_record(Input, RecordName, RecordSize) when is_tuple(Input), size(Input) == RecordSize, RecordSize >= 1, element(1, Input) =:= RecordName ->
+    true;
+is_record(_, _, _) ->
+    false.
 
 %% ---------------------------------------------------------------------------
 %% to json

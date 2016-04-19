@@ -212,7 +212,8 @@ parse_transform_test_() ->
             {ok, Record} = default_property:default_property(InitialJson),
             1 = default_property:f1(Record),
             <<"hi">> = default_property:f2(Record),
-            {ok, [{}]} = default_property:default_property(Record)
+            EmptyRec = default_property:f1(undefined, default_property:f2(undefined, Record)),
+            {ok, [{}]} = default_property:default_property(EmptyRec)
         end},
 
         {"property name can be altered", fun() ->
@@ -225,7 +226,8 @@ parse_transform_test_() ->
             {ok, Record} = renamed_property:goober(InitialJson),
             42 = renamed_property:f1(Record),
             hello = renamed_property:f2(Record),
-            {ok, [{}]} = default_property:default_property(Record)
+            EmptyRec = renamed_property:f1(undefined, renamed_property:f2(undefined, Record)),
+            {ok, [{}]} = renamed_property:goober(EmptyRec)
 
         end},
 

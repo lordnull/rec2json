@@ -9,6 +9,8 @@
 -record(careful_tests, {
 	one_field
 }).
+-type careful_tests() :: #careful_tests{}.
+-export_type([careful_tests/0]).
 
 % the real test is if this compiles or not. By deafult, rec2json should
 % not stomp on existing functions, even if this would prevent the module
