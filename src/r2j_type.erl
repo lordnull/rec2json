@@ -8,7 +8,7 @@
 -export([string/2]).
 
 -type unsafe_atom() :: atom().
--export_types([
+-export_type([
     unsafe_atom/0
 ]).
 
