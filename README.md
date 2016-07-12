@@ -32,9 +32,9 @@ record.
 
 To run tests:
 
-    make eunit
+    make tests
 
-    make test
+    make check
 
 ## Use
 
