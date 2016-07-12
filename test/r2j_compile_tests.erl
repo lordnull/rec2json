@@ -89,17 +89,22 @@ types_gen([{Nth, Type} | Tail]) ->
     end,
     {generator, fun() -> [{Type, Test} | {generator, Generator}] end}.
 
+-define(TEST_DIRECTORY, "test/").
+
 parse_transform_test_() ->
     [
 
+        % while the mdule is likely already compiled once, we don't want to
+        % have to potenially keep doing a clean just to ensure changes to the
+        % parse transform don't break stuff, thus the recompiles here.
         {"compile", fun() ->
-            Got = compile:file("../test/test_rec"),
+            Got = compile:file(?TEST_DIRECTORY ++ "test_rec"),
             ?assertEqual({ok, test_rec}, Got)
         end},
 
         {"The new module can be loaded", fun() ->
-            {ok, _Module, Binary} = compile:file("../test/test_rec", [binary]),
-            ?assertEqual({module, test_rec}, code:load_binary(test_rec, "../test/test_rec", Binary))
+            {ok, _Module, Binary} = compile:file(?TEST_DIRECTORY ++ "test_rec", [binary]),
+            ?assertEqual({module, test_rec}, code:load_binary(test_rec, ?TEST_DIRECTORY ++ "test_rec", Binary))
         end},
 
         {"has to_json/1", fun() ->
@@ -107,13 +112,13 @@ parse_transform_test_() ->
         end},
 
         {"compile a second with functions", fun() ->
-            Got = compile:file("../test/test_person"),
+            Got = compile:file(?TEST_DIRECTORY ++ "test_person"),
             ?assertEqual({ok, test_person}, Got)
         end},
 
         {"Can load test_person", fun() ->
-            {ok, _Module, Binary} = compile:file("../test/test_person", [binary]),
-            ?assertEqual({module, test_person}, code:load_binary(test_person, "../test/test_person", Binary))
+            {ok, _Module, Binary} = compile:file(?TEST_DIRECTORY ++ "test_person", [binary]),
+            ?assertEqual({module, test_person}, code:load_binary(test_person, ?TEST_DIRECTORY ++ "test_person", Binary))
         end},
 
         {"has originally defined function", fun() ->
@@ -133,8 +138,8 @@ parse_transform_test_() ->
         end},
 
         {"compile and load with no accessors", fun() ->
-            {ok, _Module, Binary} = compile:file("../test/test_person", [binary, {rec2json, [{generate_accessors, false}]}]),
-            Got = code:load_binary(test_person, "../test/test_no_accessor", Binary),
+            {ok, _Module, Binary} = compile:file(?TEST_DIRECTORY ++ "test_person", [binary, {rec2json, [{generate_accessors, false}]}]),
+            Got = code:load_binary(test_person, ?TEST_DIRECTORY ++ "test_no_accessor", Binary),
             ?assertEqual({module, test_person}, Got)
         end},
 
@@ -152,8 +157,8 @@ parse_transform_test_() ->
         end},
 
         {"compile and load with no settors", fun() ->
-            {ok, _Module, Binary} = compile:file("../test/test_person", [binary, {rec2json, [{generate_setters, false}]}]),
-            Got = code:load_binary(test_person, "../test/test_no_setters", Binary),
+            {ok, _Module, Binary} = compile:file(?TEST_DIRECTORY ++ "test_person", [binary, {rec2json, [{generate_setters, false}]}]),
+            Got = code:load_binary(test_person, ?TEST_DIRECTORY ++ "test_no_setters", Binary),
             ?assertEqual({module, test_person}, Got)
         end},
 
@@ -171,14 +176,14 @@ parse_transform_test_() ->
         end},
 
         {"compile with no accessors or setters", fun() ->
-            {ok, _Module, Binary} = compile:file("../test/test_person", [
+            {ok, _Module, Binary} = compile:file(?TEST_DIRECTORY ++ "test_person", [
                 binary,
                 {rec2json, [
                     {generate_setters, false},
                     {generate_accessors, false}
                 ]}
             ]),
-            Got = code:load_binary(test_person, "../test/test_no_getset", Binary),
+            Got = code:load_binary(test_person, ?TEST_DIRECTORY ++ "test_no_getset", Binary),
             ?assertEqual({module, test_person}, Got)
         end},
 
@@ -233,7 +238,7 @@ parse_transform_test_() ->
 
 feature_test_() ->
     {setup, fun() ->
-        r2j_compile:scan_file("../test/r2j_compile_tests.hrl", [])
+        r2j_compile:scan_file(?TEST_DIRECTORY ++ "r2j_compile_tests.hrl", [])
     end, fun(_) ->
         ok
     end, fun(_) -> [
