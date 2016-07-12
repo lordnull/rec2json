@@ -1,6 +1,6 @@
 PROJECT = rec2json
 PROJECT_DESCRIPTION = Compile erlang record definitions into modules to convert them to/from json easily.
-PROJECT_VERSION = 3.0.4
+PROJECT_VERSION = 3.2.0
 
 TEST_DEPS = proper jsx
 dep_proper = git https://github.com/manopapad/proper master
