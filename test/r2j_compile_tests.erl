@@ -7,13 +7,6 @@
 
 -export([point/1]).
 
--record(basic_rec, {
-    boolean_thing,
-    unicode_str,
-    count,
-    maybe_count
-}).
-
 compile_strings_test_() -> [
     {"simple record compile", fun() ->
         r2j_compile:scan_string("-record(cst1, {}).", []),
@@ -465,7 +458,7 @@ feature_test_() ->
             Expected = #feature{list_type = null},
             Json = [{list_type, null}],
             Got = feature:from_json(Json),
-            ?assertEqual({ok, Expected, [list_type]}, feature:from_json(Json))
+            ?assertEqual({ok, Expected, [list_type]}, Got)
         end},
 
         {"from json with type mismatch: list 2", fun() ->
@@ -537,8 +530,8 @@ feature_test_() ->
             Zipped = lists:zip(Fields, Types),
             ?assertEqual(length(Zipped), length(Got)),
             GotZipped = lists:zip(Zipped, Got),
-            lists:map(fun({Expected, Got}) ->
-                ?assertEqual(Expected, Got)
+            lists:map(fun({Expected, G}) ->
+                ?assertEqual(Expected, G)
             end, GotZipped)
         end}
 
@@ -879,7 +872,7 @@ prop_r2j_min_max_listed() ->
         FoldFun = fun
             (Int, _Index, Acc) when is_integer(Int), -100 =< Int, Int =< 100 ->
                 Acc;
-            (Bad, Index, Acc) ->
+            (_Bad, Index, Acc) ->
                 [Index | Acc]
         end,
         Expected = case fold_ind(FoldFun, [], Val) of

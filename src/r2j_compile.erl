@@ -84,14 +84,19 @@ parse_forms([Tokens | Tail], Acc) ->
     {ok, Form} = erl_parse:parse_form(Tokens),
     parse_forms(Tail, [Form | Acc]).
 
-output([], _OutputDir) ->
-    ok;
+output(Modules, OutputDir) ->
+    lists:foreach(fun(Module) ->
+        try_write_module(Module, OutputDir)
+    end, Modules).
 
-output([Module | Tail], OutputDir) ->
-    {ok, ModName, Bin, _Warnings} = compile:forms(Module, [return]),
-    File = filename:join(OutputDir, atom_to_list(ModName) ++ ".beam"),
-    ok = file:write_file(File, Bin),
-    output(Tail, OutputDir).
+try_write_module(Module, OutputDir) ->
+    case compile:forms(Module, [return]) of
+        {ok, ModName, Bin, _Warings} ->
+            File = filename:join(OutputDir, atom_to_list(ModName) ++ ".beam"),
+            ok = file:write_file(File, Bin);
+        Else ->
+            error({compile_failed, Else, Module})
+    end.
 
 analyze_forms(Forms, Params) ->
     analyze_forms(Forms, [], Params).
