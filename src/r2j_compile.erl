@@ -110,7 +110,7 @@ analyze_forms([Form | Forms], Acc, Params) ->
             case erl_syntax_lib:analyze_attribute(Form) of
                 {record, {RecordName, _RecordFields}} ->
                     SimpleFields = simplify_fields(Form),
-                    Mod = create_module(RecordName, SimpleFields, Params),
+                    Mod = create_module(RecordName, SimpleFields, Form, Params),
                     analyze_forms(Forms, [Mod | Acc], Params);
                 _ ->
                     analyze_forms(Forms, Acc, Params)
@@ -245,13 +245,13 @@ supported_type(record, _) ->
 supported_type(_,_) ->
     false.
 
-create_module(RecordName, Fields, Params) ->
+create_module(RecordName, Fields, RecordDecl, Params) ->
     {ok, ModuleDeclaration} = module_declaration(RecordName),
     {ok, Type} = type_declaration(RecordName, Params),
     {ok, ExportType} = export_type_declaration(RecordName, Params),
     {ok, ExportDeclaration} = export_declaration(RecordName, Fields, Params),
     {ok, NewFunctions} = additional_funcs(RecordName, Fields, Params),
-    [ModuleDeclaration, ExportDeclaration] ++ NewFunctions.
+    [ModuleDeclaration, RecordDecl, ExportDeclaration] ++ Type ++ ExportType ++ NewFunctions.
 
 type_declaration(RecordName, Params) ->
     case proplists:get_value(generate_type, Params, true) of
