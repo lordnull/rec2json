@@ -1,27 +1,9 @@
-REPO        ?= rec2json
+PROJECT = rec2json
+PROJECT_DESCRIPTION = Compile erlang record definitions into modules to convert them to/from json easily.
+PROJECT_VERSION = 3.2.0
 
-.PHONY: rel deps
+TEST_DEPS = proper jsx
+dep_proper = git https://github.com/manopapad/proper master
+dep_jsx = git https://github.com/talentdeficit/jsx v2.4.0
 
-all: deps compile
-
-compile:
-	./rebar compile
-
-deps:
-	./rebar get-deps
-
-clean: testclean
-	./rebar clean
-
-distclean: clean
-	./rebar delete-deps
-
-TEST_LOG_FILE := eunit.log
-testclean:
-	@rm -f $(TEST_LOG_FILE)
-
-DIALYZER_APPS = kernel stdlib syntax_tools compiler
-
-include tools.mk
-
-test_all: test dialyzer
+include erlang.mk

@@ -158,7 +158,7 @@ careful_type_decl(NewTypeDecl, AllForms) ->
 is_json_object([{}]) ->
     true;
 is_json_object(List) when is_list(List), length(List) >= 1 ->
-    lists:all(fun({K, Y}) -> true; (_) -> false end, List);
+    lists:all(fun({_K, _Y}) -> true; (_) -> false end, List);
 is_json_object(_) ->
     false.
 

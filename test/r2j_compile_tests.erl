@@ -7,28 +7,24 @@
 
 -export([point/1]).
 
--record(basic_rec, {
-    boolean_thing,
-    unicode_str,
-    count,
-    maybe_count
-}).
+-define(TEST_DIRECTORY, "test/").
+
 
 compile_strings_test_() -> [
     {"simple record compile", fun() ->
-        r2j_compile:scan_string("-record(cst1, {}).", []),
+        r2j_compile:scan_string("-record(cst1, {}).", [{output_dir, ?TEST_DIRECTORY}]),
         code:load_file(cst1),
         ?assert(erlang:function_exported(cst1, to_json, 1))
     end},
 
     {"record with a type compile", fun() ->
-        r2j_compile:scan_string("-record(cst2, {f :: pos_integer()}).", []),
+        r2j_compile:scan_string("-record(cst2, {f :: pos_integer()}).", [{output_dir, ?TEST_DIRECTORY}]),
         code:load_file(cst2),
         ?assert(erlang:function_exported(cst2, to_json, 1))
     end},
 
     {"two records", fun() ->
-        r2j_compile:scan_string("-record(cst3_1, {f}).\n-record(cst3_2, {baz :: integer()}).", []),
+        r2j_compile:scan_string("-record(cst3_1, {f}).\n-record(cst3_2, {baz :: integer()}).", [{output_dir, ?TEST_DIRECTORY}]),
         code:load_file(cst3_1),
         code:load_file(cst3_2),
         ?assert(erlang:function_exported(cst3_1, to_json, 1)),
@@ -36,7 +32,7 @@ compile_strings_test_() -> [
     end},
 
     {"a type and a record", fun() ->
-        r2j_compile:scan_string("-type foobar() :: {pos_integer(), integer()}.\n-record(cst4, {foobar :: [foobar()]}).", []),
+        r2j_compile:scan_string("-type foobar() :: {pos_integer(), integer()}.\n-record(cst4, {foobar :: [foobar()]}).", [{output_dir, ?TEST_DIRECTORY}]),
         code:load_file(cst4),
         ?assert(erlang:function_exported(cst4, to_json, 1))
     end},
@@ -56,13 +52,13 @@ compile_strings_test_() -> [
     end},
 
     {"has an accessor function", fun() ->
-        r2j_compile:scan_string("-record(cst5, {f}).", []),
+        r2j_compile:scan_string("-record(cst5, {f}).", [{output_dir, ?TEST_DIRECTORY}]),
         code:load_file(cst5),
         ?assert(erlang:function_exported(cst5, f, 1))
     end},
 
     {"no accessor when opted out", fun() ->
-        r2j_compile:scan_string("-record(cst6, {f}).", [{generate_accessors, false}]),
+        r2j_compile:scan_string("-record(cst6, {f}).", [{generate_accessors, false}, {output_dir, ?TEST_DIRECTORY}]),
         code:load_file(cst6),
         ?assertNot(erlang:function_exported(cst6, f, 1))
     end},
@@ -71,7 +67,7 @@ compile_strings_test_() -> [
       lists:map(fun(DefaultStr) ->
         {DefaultStr, fun() ->
           Str = "-record(cst7, { f = " ++ DefaultStr ++ " }).",
-          r2j_compile:scan_string(Str, [])
+          r2j_compile:scan_string(Str, [{output_dir, ?TEST_DIRECTORY}])
         end}
       end, ["1", "{1}", "\"string\"", "atom", "mod:func()", "mod:func(1)",
         "[1, 2, 3]", "{1, {}}", "[{}, 1, \"string\"]",
@@ -89,7 +85,7 @@ types_gen([{Nth, Type} | Tail]) ->
     end,
     RecordStr = "-record(cst5_" ++ Nth ++ ", {f " ++ Type ++ "}).",
     Test = fun() ->
-        r2j_compile:scan_string(RecordStr, []),
+        r2j_compile:scan_string(RecordStr, [{output_dir, ?TEST_DIRECTORY}]),
         Module = list_to_atom("cst5_" ++ Nth),
         code:load_file(Module),
         ?assert(erlang:function_exported(Module, to_json, 1))
@@ -99,14 +95,17 @@ types_gen([{Nth, Type} | Tail]) ->
 parse_transform_test_() ->
     [
 
+        % while the mdule is likely already compiled once, we don't want to
+        % have to potenially keep doing a clean just to ensure changes to the
+        % parse transform don't break stuff, thus the recompiles here.
         {"compile", fun() ->
-            Got = compile:file("../test/test_rec"),
+            Got = compile:file(?TEST_DIRECTORY ++ "test_rec", [{outdir, ?TEST_DIRECTORY}]),
             ?assertEqual({ok, test_rec}, Got)
         end},
 
         {"The new module can be loaded", fun() ->
-            {ok, _Module, Binary} = compile:file("../test/test_rec", [binary]),
-            ?assertEqual({module, test_rec}, code:load_binary(test_rec, "../test/test_rec", Binary))
+            {ok, _Module, Binary} = compile:file(?TEST_DIRECTORY ++ "test_rec", [binary]),
+            ?assertEqual({module, test_rec}, code:load_binary(test_rec, ?TEST_DIRECTORY ++ "test_rec", Binary))
         end},
 
         {"has to_json/1", fun() ->
@@ -114,13 +113,13 @@ parse_transform_test_() ->
         end},
 
         {"compile a second with functions", fun() ->
-            Got = compile:file("../test/test_person"),
+            Got = compile:file(?TEST_DIRECTORY ++ "test_person", [{outdir, ?TEST_DIRECTORY}]),
             ?assertEqual({ok, test_person}, Got)
         end},
 
         {"Can load test_person", fun() ->
-            {ok, _Module, Binary} = compile:file("../test/test_person", [binary]),
-            ?assertEqual({module, test_person}, code:load_binary(test_person, "../test/test_person", Binary))
+            {ok, _Module, Binary} = compile:file(?TEST_DIRECTORY ++ "test_person", [binary]),
+            ?assertEqual({module, test_person}, code:load_binary(test_person, ?TEST_DIRECTORY ++ "test_person", Binary))
         end},
 
         {"has originally defined function", fun() ->
@@ -140,8 +139,8 @@ parse_transform_test_() ->
         end},
 
         {"compile and load with no accessors", fun() ->
-            {ok, _Module, Binary} = compile:file("../test/test_person", [binary, {rec2json, [{generate_accessors, false}]}]),
-            Got = code:load_binary(test_person, "../test/test_no_accessor", Binary),
+            {ok, _Module, Binary} = compile:file(?TEST_DIRECTORY ++ "test_person", [binary, {rec2json, [{generate_accessors, false}]}]),
+            Got = code:load_binary(test_person, ?TEST_DIRECTORY ++ "test_no_accessor", Binary),
             ?assertEqual({module, test_person}, Got)
         end},
 
@@ -159,8 +158,8 @@ parse_transform_test_() ->
         end},
 
         {"compile and load with no settors", fun() ->
-            {ok, _Module, Binary} = compile:file("../test/test_person", [binary, {rec2json, [{generate_setters, false}]}]),
-            Got = code:load_binary(test_person, "../test/test_no_setters", Binary),
+            {ok, _Module, Binary} = compile:file(?TEST_DIRECTORY ++ "test_person", [binary, {rec2json, [{generate_setters, false}]}]),
+            Got = code:load_binary(test_person, ?TEST_DIRECTORY ++ "test_no_setters", Binary),
             ?assertEqual({module, test_person}, Got)
         end},
 
@@ -178,14 +177,14 @@ parse_transform_test_() ->
         end},
 
         {"compile with no accessors or setters", fun() ->
-            {ok, _Module, Binary} = compile:file("../test/test_person", [
+            {ok, _Module, Binary} = compile:file(?TEST_DIRECTORY ++ "test_person", [
                 binary,
                 {rec2json, [
                     {generate_setters, false},
                     {generate_accessors, false}
                 ]}
             ]),
-            Got = code:load_binary(test_person, "../test/test_no_getset", Binary),
+            Got = code:load_binary(test_person, ?TEST_DIRECTORY ++ "test_no_getset", Binary),
             ?assertEqual({module, test_person}, Got)
         end},
 
@@ -240,7 +239,7 @@ parse_transform_test_() ->
 
 feature_test_() ->
     {setup, fun() ->
-        r2j_compile:scan_file("../test/r2j_compile_tests.hrl", [])
+        r2j_compile:scan_file(?TEST_DIRECTORY ++ "r2j_compile_tests.hrl", [{output_dir, ?TEST_DIRECTORY}])
     end, fun(_) ->
         ok
     end, fun(_) -> [
@@ -465,7 +464,7 @@ feature_test_() ->
             Expected = #feature{list_type = null},
             Json = [{list_type, null}],
             Got = feature:from_json(Json),
-            ?assertEqual({ok, Expected, [list_type]}, feature:from_json(Json))
+            ?assertEqual({ok, Expected, [list_type]}, Got)
         end},
 
         {"from json with type mismatch: list 2", fun() ->
@@ -537,8 +536,8 @@ feature_test_() ->
             Zipped = lists:zip(Fields, Types),
             ?assertEqual(length(Zipped), length(Got)),
             GotZipped = lists:zip(Zipped, Got),
-            lists:map(fun({Expected, Got}) ->
-                ?assertEqual(Expected, Got)
+            lists:map(fun({Expected, G}) ->
+                ?assertEqual(Expected, G)
             end, GotZipped)
         end}
 
@@ -570,7 +569,7 @@ proper_test_gen([ProperTest | Tail]) ->
 
 %% proper funcs.
 prop_integer() ->
-    r2j_compile:scan_string("-record(prop_integer, {f :: integer()}).", []),
+    r2j_compile:scan_string("-record(prop_integer, {f :: integer()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Val, oneof([int(), real()]),
     begin
         Expected = {prop_integer, Val},
@@ -585,7 +584,7 @@ prop_integer() ->
     end).
 
 prop_pos_integer() ->
-    r2j_compile:scan_string("-record(prop_pos_integer, {f :: pos_integer()}).", []),
+    r2j_compile:scan_string("-record(prop_pos_integer, {f :: pos_integer()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Int, int(),
     begin
         Expected = {prop_pos_integer, Int},
@@ -600,7 +599,7 @@ prop_pos_integer() ->
     end).
 
 prop_int_or_bool() ->
-    r2j_compile:scan_string("-record(prop_int_or_bool, {f :: integer() | boolean()}).", []),
+    r2j_compile:scan_string("-record(prop_int_or_bool, {f :: integer() | boolean()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(IntOrBool, oneof([int(), bool(), binary(), real()]),
     begin
         Expected = {prop_int_or_bool, IntOrBool},
@@ -615,7 +614,7 @@ prop_int_or_bool() ->
     end).
 
 prop_atoms() ->
-    r2j_compile:scan_string("-record(prop_atoms, {f :: 'init' | 'ready' | 'steady'}).", []),
+    r2j_compile:scan_string("-record(prop_atoms, {f :: 'init' | 'ready' | 'steady'}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Atom, oneof([init, ready, steady, go, stop, hop]),
     begin
         Json = [{f, list_to_binary(atom_to_list(Atom))}],
@@ -631,7 +630,7 @@ prop_atoms() ->
     end).
 
 prop_non_neg_integer() ->
-    r2j_compile:scan_string("-record(prop_non_neg_integer, {f :: non_neg_integer()}).", []),
+    r2j_compile:scan_string("-record(prop_non_neg_integer, {f :: non_neg_integer()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Int, int(),
     begin
         Json = [{f, Int}],
@@ -646,7 +645,7 @@ prop_non_neg_integer() ->
     end).
 
 prop_boolean() ->
-    r2j_compile:scan_string("-record(prop_boolean, {f :: boolean()}).", []),
+    r2j_compile:scan_string("-record(prop_boolean, {f :: boolean()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Bool, oneof([bool(), goober]),
     begin
         Expected = {prop_boolean, Bool},
@@ -661,7 +660,7 @@ prop_boolean() ->
     end).
 
 prop_neg_integer() ->
-    r2j_compile:scan_string("-record(prop_neg_integer, {f :: neg_integer()}).", []),
+    r2j_compile:scan_string("-record(prop_neg_integer, {f :: neg_integer()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Int, int(),
     begin
         Expected = {prop_neg_integer, Int},
@@ -676,7 +675,7 @@ prop_neg_integer() ->
     end).
 
 prop_number() ->
-    r2j_compile:scan_string("-record(prop_number, {f :: number()}).", []),
+    r2j_compile:scan_string("-record(prop_number, {f :: number()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Number, oneof([int(), real(), goober]),
     begin
         Expected = {prop_number, Number},
@@ -691,7 +690,7 @@ prop_number() ->
     end).
 
 prop_binary() ->
-    r2j_compile:scan_string("-record(prop_binary, {f :: binary()}).", []),
+    r2j_compile:scan_string("-record(prop_binary, {f :: binary()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Binary, oneof([list(int()), binary()]),
     begin
         Expected = {prop_binary, Binary},
@@ -706,7 +705,7 @@ prop_binary() ->
     end).
 
 prop_float() ->
-    r2j_compile:scan_string("-record(prop_float, {f :: float()}).", []),
+    r2j_compile:scan_string("-record(prop_float, {f :: float()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Float, oneof([int(), real()]),
     begin
         Expected = {prop_float, Float},
@@ -727,7 +726,7 @@ prop_float() ->
     end).
 
 prop_list_one() ->
-    r2j_compile:scan_string("-record(prop_list_one, {f :: [integer()]}).", []),
+    r2j_compile:scan_string("-record(prop_list_one, {f :: [integer()]}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(List, list(oneof([int(), real()])),
     begin
         Expected = {prop_list_one, List},
@@ -749,8 +748,8 @@ prop_list_one() ->
     end).
 
 prop_record_one() ->
-    r2j_compile:scan_string("-record(prop_record_one_outer, {f :: #prop_record_one_inner{}}).", []),
-    r2j_compile:scan_string("-record(prop_record_one_inner, {f :: integer()}).", []),
+    r2j_compile:scan_string("-record(prop_record_one_outer, {f :: #prop_record_one_inner{}}).", [{output_dir, ?TEST_DIRECTORY}]),
+    r2j_compile:scan_string("-record(prop_record_one_inner, {f :: integer()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(SubRec, oneof([int(), [{}], [{f, oneof([int(), real()])}]]),
     begin
         {Json, Expected, Warns} = case SubRec of
@@ -773,7 +772,7 @@ prop_record_one() ->
     end).
 
 prop_user_type() ->
-    r2j_compile:scan_string("-record(prop_user_type, {f :: user_type()} ).", []),
+    r2j_compile:scan_string("-record(prop_user_type, {f :: user_type()} ).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
     begin
         Json = [{<<"f">>, Val}],
@@ -784,7 +783,7 @@ prop_user_type() ->
     end).
 
 prop_user_type_default() ->
-    r2j_compile:scan_string("-record(prop_user_type_default, {f  = 3 :: user_type()} ).", []),
+    r2j_compile:scan_string("-record(prop_user_type_default, {f  = 3 :: user_type()} ).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
     begin
         Json = [{<<"f">>, Val}],
@@ -795,7 +794,7 @@ prop_user_type_default() ->
     end).
 
 prop_user_type_list() ->
-    r2j_compile:scan_string("-record(prop_user_type_list, {f :: [user_type()]} ).", []),
+    r2j_compile:scan_string("-record(prop_user_type_list, {f :: [user_type()]} ).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(List, list({oneof([<<"a">>,<<"b">>,<<"c">>]), oneof([<<"bin">>, int(), real()])}),
     begin
         Json = [{<<"f">>, List}],
@@ -805,7 +804,7 @@ prop_user_type_list() ->
     end).
 
 prop_r2j_integer_type() ->
-    r2j_compile:scan_string("-record(prop_r2j_integer_type, {f :: r2j_type:integer()} ).", []),
+    r2j_compile:scan_string("-record(prop_r2j_integer_type, {f :: r2j_type:integer()} ).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
     begin
         Json = [{<<"f">>, Val}],
@@ -838,7 +837,7 @@ prop_r2j_integer_type() ->
     end).
 
 prop_r2j_integer_min_max_type() ->
-    r2j_compile:scan_string("-record(prop_r2j_integer_min_max_type, {f :: r2j_type:integer(-100, 100)} ).", []),
+    r2j_compile:scan_string("-record(prop_r2j_integer_min_max_type, {f :: r2j_type:integer(-100, 100)} ).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
     begin
         Json = [{<<"f">>, Val}],
@@ -871,7 +870,7 @@ prop_r2j_integer_min_max_type() ->
     end).
 
 prop_r2j_min_max_listed() ->
-    r2j_compile:scan_string("-record(prop_r2j_integer_min_max_listed, {f :: [r2j_type:integer(-100, 100)]} ).", []),
+    r2j_compile:scan_string("-record(prop_r2j_integer_min_max_listed, {f :: [r2j_type:integer(-100, 100)]} ).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Val, list(oneof([<<"bin">>, int(), real()])),
     begin
         Json = [{<<"f">>, Val}],
@@ -879,7 +878,7 @@ prop_r2j_min_max_listed() ->
         FoldFun = fun
             (Int, _Index, Acc) when is_integer(Int), -100 =< Int, Int =< 100 ->
                 Acc;
-            (Bad, Index, Acc) ->
+            (_Bad, Index, Acc) ->
                 [Index | Acc]
         end,
         Expected = case fold_ind(FoldFun, [], Val) of
@@ -916,7 +915,7 @@ prop_r2j_min_max_listed() ->
     end).
 
 prop_r2j_type_translation() ->
-    r2j_compile:scan_string("-record(type_translation, {p :: r2j_compile_tests:point()} ).", []),
+    r2j_compile:scan_string("-record(type_translation, {p :: r2j_compile_tests:point()} ).", [{output_dir, ?TEST_DIRECTORY}]),
         ?FORALL({X, Y} = RecVal, {int(), int()},
         begin
         Json = [{<<"p">>, [{<<"x">>, X}, {<<"y">>, Y}]}],

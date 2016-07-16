@@ -18,7 +18,7 @@
 }).
 
 -type int_tuple() :: any().
-
+-export_type([int_tuple/0]).
 -export([int_tuple/1]).
 
 int_tuple(Tuple) when is_tuple(Tuple) ->
