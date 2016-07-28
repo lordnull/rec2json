@@ -8,3 +8,4 @@ test/*.beam
 .local_dialyzer_plt
 .erlang.mk
 rec2json.d
+.rec2json.plt
