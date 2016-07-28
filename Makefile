@@ -6,4 +6,6 @@ TEST_DEPS = proper jsx
 dep_proper = git https://github.com/manopapad/proper master
 dep_jsx = git https://github.com/talentdeficit/jsx v2.4.0
 
+app:: rebar.config
+
 include erlang.mk
