@@ -1,11 +1,11 @@
 %% Copyright 2012 Micah Warren
-%% 
+%%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
 %% You may obtain a copy of the License at
-%% 
+%%
 %%   http://www.apache.org/licenses/LICENSE-2.0
-%% 
+%%
 %% Unless required by applicable law or agreed to in writing, software
 %% distributed under the License is distributed on an "AS IS" BASIS,
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -125,14 +125,14 @@ careful_functions(NewFunctions, AllForms) ->
 
 careful_type_exports([], _) ->
     [];
-    
+
 careful_type_exports(NewTypeExportDecl, AllForms) ->
     [{attribute, Line, export_type, NewExports}] = NewTypeExportDecl,
     OrigDecl = lists:foldl(fun
         ({attribute, _, export_type, Exp}, Acc) ->
             Exp ++ Acc;
         (_, Acc) ->
-            Acc 
+            Acc
     end, [], AllForms),
     SafeExports = NewExports -- OrigDecl,
     [{attribute, Line, export_type, SafeExports}].
@@ -155,12 +155,8 @@ careful_type_decl(NewTypeDecl, AllForms) ->
             NewTypeDecl
     end.
 
-is_json_object([{}]) ->
-    true;
-is_json_object(List) when is_list(List), length(List) >= 1 ->
-    lists:all(fun({_K, _Y}) -> true; (_) -> false end, List);
-is_json_object(_) ->
-    false.
+is_json_object(Term) ->
+    is_map(Term).
 
 is_record(Input, RecordName, RecordSize) when is_tuple(Input), size(Input) == RecordSize, RecordSize >= 1, element(1, Input) =:= RecordName ->
     true;
@@ -208,63 +204,57 @@ to_json(Tuple, Options) when is_tuple(Tuple) ->
             end
     end, {TreatUndef, []}, Zipped),
     UntransformedJson = lists:reverse(ReversedJsonProps),
-    to_json_apply_transformations(Tuple, UntransformedJson, Transforms).
+    UntransformedMap = maps:from_list(UntransformedJson),
+    to_json_apply_transformations(Tuple, UntransformedMap, Transforms).
 
-from_json(SeedTuple, [{}], _Options) ->
+from_json(SeedTuple, Map, _Options) when map_size(Map) == 0 ->
     {ok, SeedTuple};
 
-from_json(SeedTuple, Json, Options) ->
+from_json(SeedTuple, Map, Options) ->
     Module = element(1, SeedTuple),
     Names = Module:field_names(),
     Types = Module:field_types(),
     Elems = lists:seq(2, length(Names) + 1),
-    NameBins = [list_to_binary(atom_to_list(N)) || N <- Names],
+    NameBins = [atom_to_binary(N, utf8) || N <- Names],
     Zipper = fun(Name, TypeList, Elem) ->
         {Name, {Elem, TypeList}}
     end,
     Zipped = lists:zipwith3(Zipper, NameBins, Types, Elems),
     TreatNull = proplists:get_value(null_is_undefined, Options, false),
-    from_json(Zipped, Json, TreatNull, SeedTuple, []).
+    NameMap = maps:from_list(Zipped),
+    FoldResult = maps:fold(fun(JsonKey, JsonValue, {AccTuple, Warnings}) ->
+        from_json_key_value(JsonKey, JsonValue, NameMap, TreatNull, AccTuple, Warnings)
+    end, {SeedTuple, []}, Map),
+    case FoldResult of
+        {Record, []} ->
+            {ok, Record};
+        {Record, Warnings} ->
+            {ok, Record, Warnings}
+    end.
 
-from_json(_Zipped, [], _TreatNull, Tuple, []) ->
-    {ok, Tuple};
-
-from_json(_Zipped, [], _TreatNull, Tuple, Warnings) ->
-    {ok, Tuple, lists:reverse(Warnings)};
-
-from_json(Zipped, [{NameAtom, Value} | Json], TreatNull, Tuple, Warnings) when is_atom(NameAtom) ->
-    NameBin = list_to_binary(atom_to_list(NameAtom)),
-    from_json(Zipped, [{NameBin, Value} | Json], TreatNull, Tuple, Warnings);
-
-from_json(Zipped, [{Name, null} | Json], true, Tuple, Warnings) ->
-    from_json(Zipped, [{Name, undefined} | Json], true, Tuple, Warnings);
-
-from_json(Zipped, [{Name, Value} | Json], TreatNull, Tuple, Warnings) ->
-    case proplists:get_value(Name, Zipped) of
-        undefined ->
-            from_json(Zipped, Json, TreatNull, Tuple, Warnings);
-        {Elem, Types} ->
-            Options = if
-                TreatNull ->
-                    [null_is_undefined];
-                true ->
-                    []
-            end,
-            case maybe_convertable(Value, Types, Options) of
+from_json_key_value(Key, Value, TransformMap, TreatNull, AccTuple, Warnings) when is_atom(Key) ->
+    from_json_key_value(atom_to_binary(Key, utf8), Value, TransformMap, TreatNull, AccTuple, Warnings);
+from_json_key_value(Key, Value, TransformMap, TreatNull, AccTuple, Warnings) ->
+    case maps:find(Key, TransformMap) of
+        error ->
+            {AccTuple, Warnings};
+        {ok, {Elem, TypeList}} ->
+            Options = if TreatNull -> [null_is_undefined]; true -> [] end,
+            case maybe_convertable(Value, TypeList, Options) of
                 error ->
-                    Tuple2 = setelement(Elem, Tuple, Value),
-                    Warnings2 = [list_to_atom(binary_to_list(Name)) | Warnings],
-                    from_json(Zipped, Json, TreatNull, Tuple2, Warnings2);
+                    NewAccTuple = setelement(Elem, AccTuple, Value),
+                    NewWarnings = [binary_to_atom(Key, utf8) | Warnings],
+                    {NewAccTuple, NewWarnings};
                 {ok, Value2} ->
-                    Tuple2 = setelement(Elem, Tuple, Value2),
-                    from_json(Zipped, Json, TreatNull, Tuple2, Warnings);
+                    NewAccTuple = setelement(Elem, AccTuple, Value2),
+                    {NewAccTuple, Warnings};
                 {ok, Value2, SubWarns} ->
-                    Tuple2 = setelement(Elem, Tuple, Value2),
-                    Warnings2 = lists:foldl(fun(SubWarn, Warns) ->
-                        NameAtom = list_to_atom(binary_to_list(Name)),
-                        [[NameAtom, SubWarn] | Warns]
+                    NewAccTuple = setelement(Elem, AccTuple, Value2),
+                    NewWarnings = lists:foldr(fun(SubWarn, Warns) ->
+                        NameAtom = binary_to_atom(Key, utf8),
+                        [[NameAtom,SubWarn] | Warns]
                     end, Warnings, SubWarns),
-                    from_json(Zipped, Json, TreatNull, Tuple2, Warnings2)
+                    {NewAccTuple, NewWarnings}
             end
     end.
 
@@ -328,32 +318,12 @@ maybe_convertable(Tuple, [{record, RecName} | Types], Options) when is_tuple(Tup
             maybe_convertable(Tuple, Types, Options)
     end;
 
-maybe_convertable([{}], [{record, RecName} | Types], Options) ->
-    try RecName:from_json([{}], Options) of
+maybe_convertable(Json, [{record, RecName} | Types], Options) when is_map(Json) ->
+    try RecName:from_json(Json, Options) of
         Res ->
             Res
     catch
         error:undef ->
-            maybe_convertable([{}], Types, Options)
-    end;
-
-maybe_convertable(Json, [{record, RecName} | Types], Options) when is_list(Json), length(Json) > 0 ->
-    AllTuples = lists:all(fun(In) ->
-        case In of
-            {_,_} -> true;
-            _ -> false
-        end
-    end, Json),
-    if
-        AllTuples ->
-            try RecName:from_json(Json, Options) of
-                Res ->
-                    Res
-            catch
-                error:undef ->
-                    maybe_convertable(Json, Types, Options)
-            end;
-        true ->
             maybe_convertable(Json, Types, Options)
     end;
 
@@ -383,19 +353,19 @@ maybe_convertable(Values, [{list, ListTypes} | _Types], Options) when is_list(Va
 maybe_convertable(Value, [{list, _ListTypes} | Types], Options) ->
     maybe_convertable(Value, Types, Options).
 
-to_json_apply_transformations(_Tuple, [], []) ->
-    [{}];
 to_json_apply_transformations(_Typle, Json, []) ->
     Json;
-to_json_apply_transformations(Tuple, Json, [{K, _V} = Prop | Tail]) ->
-    Json2 = lists:keystore(K, 1, Json, Prop),
+
+to_json_apply_transformations(Tuple, Json, [Props | Tail]) when is_map(Props) ->
+    Json2 = maps:merge(Json, Props),
+    to_json_apply_transformations(Tuple, Json2, Tail);
+
+to_json_apply_transformations(Tuple, Json, [{K, V} | Tail]) ->
+    Json2 = Json#{K => V},
     to_json_apply_transformations(Tuple, Json2, Tail);
 
 to_json_apply_transformations(Tuple, Json, [Atom | Tail]) when is_atom(Atom) ->
-    Json2 = case lists:keytake(Atom, 1, Json) of
-        false -> Json;
-        {value, _, NewList} -> NewList
-    end,
+    Json2 = maps:remove(Atom, Json),
     to_json_apply_transformations(Tuple, Json2, Tail);
 
 to_json_apply_transformations(Tuple, Json, [Fun | Tail]) when is_function(Fun) ->
@@ -485,7 +455,6 @@ verify_type(Val, [{Module, Function, Args} | Tail], Any, TreatNull, Opt) ->
             verify_type(Val, Tail, Any, TreatNull, Opt)
     end;
 verify_type(Val, [_Type | Tail], Any, TreatNull, Opt) ->
-    %?log("unrecognized type ~p, evaling val ~p", [Type, Val]),
     verify_type(Val, Tail, Any, TreatNull, Opt).
 
 verify_type_record(Json, RecName, Opt) ->
@@ -519,7 +488,6 @@ verify_types([], _Types, _Any, _TreatNull, _Opt, _Index, WarnIndexes, Acc) ->
             {warn, Acc1, Indexes}
     end;
 verify_types([Val | Tail], Types, Any, TreatNull, Opt, Index, WarnInd, Acc) ->
-    %?log("verifying val ~p against types ~p", [Val, Types]),
     case verify_type(Val, Types, Any, TreatNull, Opt) of
         {ok, Val1} ->
             verify_types(Tail, Types, Any, TreatNull, Opt, Index + 1, WarnInd, [Val1 | Acc]);
