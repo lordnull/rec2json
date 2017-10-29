@@ -33,12 +33,12 @@
 
 make_default() ->
     make_default(ok).
-    
+
 make_default(Val) ->
     {default, Val}.
 
 defaults_test_() ->
-    {ok, Rec} = default_value_tests:from_json([{}]),
+    {ok, Rec} = default_value_tests:from_json(#{}),
 
     Expectations = [
         {integer_no_type, 3},

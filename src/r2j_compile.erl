@@ -14,7 +14,6 @@
 
 -module(r2j_compile).
 
--export([scan_file/2, scan_string/2]).
 -export([simplify_fields/1]).
 -export([type_declaration/2, export_type_declaration/2, export_declaration/2, export_declaration/3, additional_funcs/3]).
 
@@ -34,91 +33,6 @@
 -define(log(Msg), ?log(Msg, [])).
 -endif.
 
-scan_file(Hrl, Opts) ->
-    Imports = proplists:get_value(imports_dir, Opts, []),
-    {ok, Handle} = epp:open(Hrl, Imports, []),
-    {ok, Forms} = read_epp_forms(Handle),
-    Modules = analyze_forms(Forms, Opts),
-    output(Modules, proplists:get_value(output_dir, Opts, ".")).
-
-read_epp_forms(Handle) ->
-    read_epp_forms(Handle, []).
-
-read_epp_forms(Handle, Acc) ->
-    case epp:parse_erl_form(Handle) of
-        {ok, Form} ->
-            read_epp_forms(Handle, [Form | Acc]);
-        {eof, _L} ->
-            {ok, lists:reverse(Acc)}
-    end.
-
-scan_string(Str, Opts) ->
-    %Imports = proplists:get_value(imports_dir, Opts, []),
-    {ok, Tokens, _Lines} = erl_scan:string(Str),
-    LineTokens = split_tokens_by_dots(Tokens),
-    Forms = parse_forms(LineTokens),
-    Modules = analyze_forms(Forms, Opts),
-    output(Modules, proplists:get_value(output_dir, Opts, ".")).
-
-split_tokens_by_dots(Tokens) ->
-    split_tokens_by_dots(Tokens, []).
-
-split_tokens_by_dots([], Acc) ->
-    lists:reverse(Acc);
-
-split_tokens_by_dots(Tokens, Acc) ->
-    {SansDot, [Dot | Rest]} = lists:splitwith(fun is_not_dot/1, Tokens),
-    HasDot = SansDot ++ [Dot],
-    split_tokens_by_dots(Rest, [HasDot | Acc]).
-
-is_not_dot({dot, _}) -> false;
-is_not_dot(_) -> true.
-
-parse_forms(TokenList) ->
-    parse_forms(TokenList, []).
-
-parse_forms([], Acc) ->
-    lists:reverse(Acc);
-
-parse_forms([Tokens | Tail], Acc) ->
-    {ok, Form} = erl_parse:parse_form(Tokens),
-    parse_forms(Tail, [Form | Acc]).
-
-output(Modules, OutputDir) ->
-    lists:foreach(fun(Module) ->
-        try_write_module(Module, OutputDir)
-    end, Modules).
-
-try_write_module(Module, OutputDir) ->
-    case compile:forms(Module, [return]) of
-        {ok, ModName, Bin, _Warings} ->
-            File = filename:join(OutputDir, atom_to_list(ModName) ++ ".beam"),
-            ok = file:write_file(File, Bin);
-        Else ->
-            error({compile_failed, Else, Module})
-    end.
-
-analyze_forms(Forms, Params) ->
-    analyze_forms(Forms, [], Params).
-
-analyze_forms([], Acc, _Params) ->
-    lists:reverse(Acc);
-
-analyze_forms([Form | Forms], Acc, Params) ->
-    case erl_syntax:type(Form) of
-        attribute ->
-            case erl_syntax_lib:analyze_attribute(Form) of
-                {record, {RecordName, _RecordFields}} ->
-                    SimpleFields = simplify_fields(Form),
-                    Mod = create_module(RecordName, SimpleFields, Form, Params),
-                    analyze_forms(Forms, [Mod | Acc], Params);
-                _ ->
-                    analyze_forms(Forms, Acc, Params)
-            end;
-        _ ->
-            analyze_forms(Forms, Acc, Params)
-    end.
-
 simplify_fields({attribute, _Line, record, {_RecName, Fields}}) ->
     simplify_fields(Fields, []).
 
@@ -128,7 +42,7 @@ simplify_fields([], Acc) ->
 simplify_fields([{record_field, Line, NameForm} | Tail], Acc) ->
     Name = erl_parse:normalise(NameForm),
     FieldRec = #record_field{name = Name, name_form = NameForm,
-        default_form = undefined_default(Line) },
+        default_form = undefined_default(Line), typelist = [undefined] },
     simplify_fields(Tail, [FieldRec | Acc]);
 
 simplify_fields([{record_field, _Line, NameForm, Default} | Tail], Acc) ->
@@ -145,7 +59,7 @@ simplify_fields([{typed_record_field, {record_field, Line, NameForm}, Type} | Ta
     end,
     FieldRec = #record_field{name = Name, name_form = NameForm,
         default_form = undefined_default(Line), allow_any = AllowAny,
-        typelist = Types},
+        typelist = [undefined | Types]},
     simplify_fields(Tail, [FieldRec | Acc]);
 
 simplify_fields([{typed_record_field, {record_field, _L1, NameForm, Default}, Type} | Tail], Acc) ->
@@ -197,7 +111,7 @@ extract_types([{type, _L1, list, ListTypes} | Tail], Acc) ->
 % usual {type, L, record, RecordName}.
 extract_types([{type, _L1, record, [{atom, _L2, RecordName}]} | Tail], Acc) ->
     % no way to know if it's a rec2json compiled record, so we'll just go with
-    % it. If it's not (no to/from json), there's a catch for undef in the 
+    % it. If it's not (no to/from json), there's a catch for undef in the
     % rec2json module.
     extract_types(Tail, [{record, RecordName} | Acc]);
 extract_types([{type, _L1, Type, TypeArgs} | Tail], Acc) ->
@@ -245,14 +159,6 @@ supported_type(record, _) ->
 supported_type(_,_) ->
     false.
 
-create_module(RecordName, Fields, RecordDecl, Params) ->
-    {ok, ModuleDeclaration} = module_declaration(RecordName),
-    {ok, Type} = type_declaration(RecordName, Params),
-    {ok, ExportType} = export_type_declaration(RecordName, Params),
-    {ok, ExportDeclaration} = export_declaration(RecordName, Fields, Params),
-    {ok, NewFunctions} = additional_funcs(RecordName, Fields, Params),
-    [ModuleDeclaration, RecordDecl, ExportDeclaration] ++ Type ++ ExportType ++ NewFunctions.
-
 type_declaration(RecordName, Params) ->
     case proplists:get_value(generate_type, Params, true) of
         false ->
@@ -298,7 +204,6 @@ additional_funcs(RecordName, Fields, Params) ->
     {ok, FromJsonA1} = from_json_arity1_func(RecordName, Fields),
     {ok, FromJsonA2} = from_json_arity2_func(RecordName, Fields),
     {ok, FromJsonA3} = from_json_arity3_func(),
-    ScrubKeys = scrub_keys_func(Fields),
     GrandFuncList = []
         ++ AccessorFuncs
         ++ SetterFuncs
@@ -310,11 +215,7 @@ additional_funcs(RecordName, Fields, Params) ->
         ++ [FromJsonA1]
         ++ [FromJsonA2]
         ++ [FromJsonA3]
-        ++ ScrubKeys
     , {ok, GrandFuncList}.
-
-module_declaration(Name) ->
-    {ok, {attribute, 1, module, Name}}.
 
 export_declaration(RecordName, Fields) ->
     export_declaration(RecordName, Fields, []).
@@ -476,80 +377,27 @@ blank_record(RecName, Fields) ->
     ElementList = [{atom, ?LINE, RecName} | ValueListSansName],
     {tuple, ?LINE, ElementList}.
 
-scrub_keys_func(Fields) ->
-    TopScrub = {function, ?LINE, scrub_keys, 1, [
-        {clause, ?LINE, [{var, ?LINE, 'Json'}], [], [
-            {call, ?LINE, {atom, ?LINE, scrub_keys}, [{var, ?LINE, 'Json'}, {nil, ?LINE}]}
-        ]}
-    ]},
-    EndScrubClause = scrub_key_end(),
-    CatchBinClauses = lists:map(fun scrub_key_clause/1, Fields),
-    CatchAtomClause = scrub_key_catch_atom(),
-    CatchAllClause = scrub_key_catch_all(),
-    AllClauses = [EndScrubClause] ++ CatchBinClauses ++ [CatchAtomClause, CatchAllClause],
-
-    ScrubKeys = {function, ?LINE, scrub_keys, 2, AllClauses},
-
-    [TopScrub, ScrubKeys].
-
-scrub_key_catch_atom() ->
-    KeyValueMatch = {match, ?LINE, {tuple, ?LINE, [{var, ?LINE, 'Key'}, {var, ?LINE, '_'}]}, {var, ?LINE, 'Head'}},
-    Arg1 = {cons, ?LINE, KeyValueMatch, {var, ?LINE, 'Tail'}},
-    Arg2 = {var, ?LINE, 'Acc'},
-    ArgsList = [Arg1, Arg2],
-    GuardList = [[{call, ?LINE, {atom, ?LINE, is_atom}, [{var, ?LINE, 'Key'}]}]],
-    CallList = [
-        {call, ?LINE, {atom, ?LINE, scrub_keys}, [
-            {var, ?LINE, 'Tail'}, {cons, ?LINE, {var, ?LINE, 'Head'}, {var, ?LINE, 'Acc'}}
-        ]}
-    ],
-    {clause, ?LINE, ArgsList, GuardList, CallList}.
-
-scrub_key_catch_all() ->
-    {clause, ?LINE, [{cons, ?LINE, {var, ?LINE, '_'}, {var, ?LINE, 'Tail'}}, {var, ?LINE, 'Acc'}], [], [
-        {call, ?LINE, {atom, ?LINE, scrub_keys}, [{var, ?LINE, 'Tail'}, {var, ?LINE, 'Acc'}]}
-    ]}.
-
-scrub_key_end() ->
-    {clause, ?LINE, [{nil, ?LINE}, {var, ?LINE, 'Acc'}], [], [
-        {call, ?LINE, {remote, ?LINE, {atom, ?LINE, lists}, {atom, ?LINE, reverse}}, [{var, ?LINE, 'Acc'}]}
-    ]}.
-
-scrub_key_clause(FieldRec) ->
-    NameAsBin = {bin, ?LINE, [
-        {bin_element, ?LINE, {string, ?LINE, atom_to_list(FieldRec#record_field.name) }, default, default}
-    ]},
-    ArgOneHead = {tuple, ?LINE, [NameAsBin, {var, ?LINE, 'Value'}]},
-    ArgOneTail = {var, ?LINE, 'Tail'},
-    ArgOne = {cons, ?LINE, ArgOneHead, ArgOneTail},
-    ArgsList = [ArgOne, {var, ?LINE, 'Acc'}],
-
-    AccOnTop = {cons, ?LINE, {tuple, ?LINE, [{atom, ?LINE, FieldRec#record_field.name}, {var, ?LINE, 'Value'}]}, {var, ?LINE, 'Acc'}},
-    
-    RecursiveCall = {call, ?LINE, {atom, ?LINE, scrub_keys}, [{var, ?LINE, 'Tail'}, AccOnTop]},
-    {clause, ?LINE, ArgsList, [], [RecursiveCall]}.
-
 from_json_arity1_func(RecName, Fields) ->
     BlankTuple = blank_record(RecName, Fields),
     {ok, {function, ?LINE, from_json, 1, [
         {clause, ?LINE, [{var, ?LINE, 'Json'}], [], [
-            {match, ?LINE, {var, ?LINE, 'Json2'}, {call, ?LINE, {atom, ?LINE, scrub_keys}, [{var, ?LINE, 'Json'}]}},
-            {call, ?LINE, {remote, ?LINE, {atom, ?LINE, rec2json}, {atom, ?LINE, from_json}}, [BlankTuple, {var, ?LINE, 'Json2'}, {nil, ?LINE}]}
+            {call, ?LINE, {remote, ?LINE, {atom, ?LINE, rec2json}, {atom, ?LINE, from_json}}, [BlankTuple, {var, ?LINE, 'Json'}, {nil, ?LINE}]}
         ]}
     ]}}.
 
 from_json_arity2_func(RecName, Fields) ->
     BlankRec = blank_record(RecName, Fields),
     {ok,{function, ?LINE,from_json,2, [
-        from_json_arity2_clause1(BlankRec),
-        from_json_arity2_clause2(),
-        from_json_arity2_clause3()
+        from_json_arity2_no_seed_json_first(BlankRec),
+        from_json_arity2_no_seed_json_second(BlankRec),
+        from_json_arity2_seed_first(),
+        from_json_arity2_seed_second()
     ]}}.
-  
-from_json_arity2_clause1(BlankRec) ->
+
+from_json_arity2_no_seed_json_first(BlankRec) ->
     Args = [{var, ?LINE, 'Json'}, {var, ?LINE, 'Opts'}],
     Guards = [[
-        {call, ?LINE, {atom, ?LINE, is_list}, [{var, ?LINE, 'Json'}]},
+        {call, ?LINE, {atom, ?LINE, is_map}, [{var, ?LINE, 'Json'}]},
         {call, ?LINE, {atom, ?LINE, is_list}, [{var, ?LINE, 'Opts'}]}
     ]],
     Expressions = [
@@ -557,32 +405,56 @@ from_json_arity2_clause1(BlankRec) ->
     ],
     {clause, ?LINE, Args, Guards, Expressions}.
 
-from_json_arity2_clause2() ->
+from_json_arity2_no_seed_json_second(BlankRec) ->
+    Args = [{var, ?LINE, 'Opts'}, {var, ?LINE, 'Json'}],
+    Guards = [[
+        {call, ?LINE, {atom, ?LINE, is_map}, [{var, ?LINE, 'Json'}]},
+        {call, ?LINE, {atom, ?LINE, is_list}, [{var, ?LINE, 'Opts'}]}
+    ]],
+    Expressions = [
+        {call, ?LINE, {atom, ?LINE, from_json}, [BlankRec, {var, ?LINE, 'Json'}, {var, ?LINE, 'Opts'}]}
+    ],
+    {clause, ?LINE, Args, Guards, Expressions}.
+
+from_json_arity2_seed_first() ->
     Args = [{var, ?LINE, 'Struct'}, {var, ?LINE, 'Json'}],
     Guards = [[
-        {call, ?LINE, {atom, ?LINE, is_tuple}, [{var, ?LINE, 'Struct'}]}
+        {call, ?LINE, {atom, ?LINE, is_tuple}, [{var, ?LINE, 'Struct'}]},
+        {call, ?LINE, {atom, ?LINE, is_map}, [{var, ?LINE, 'Json'}]}
     ]],
     Expressions = [
         {call, ?LINE, {atom, ?LINE, from_json}, [{var, ?LINE, 'Struct'}, {var, ?LINE, 'Json'}, {nil, ?LINE}]}
     ],
     {clause, ?LINE, Args, Guards, Expressions}.
-  
-from_json_arity2_clause3() ->
+
+from_json_arity2_seed_second() ->
     Args = [{var, ?LINE, 'Json'}, {var, ?LINE, 'Struct'}],
-    Guards = [],
+    Guards = [[
+        {call, ?LINE, {atom, ?LINE, is_tuple}, [{var, ?LINE, 'Struct'}]},
+        {call, ?LINE, {atom, ?LINE, is_map}, [{var, ?LINE, 'Json'}]}
+    ]],
     Expressions = [
         {call, ?LINE, {atom, ?LINE, from_json}, [{var, ?LINE, 'Struct'}, {var, ?LINE, 'Json'}, {nil, ?LINE}]}
     ],
     {clause, ?LINE, Args, Guards, Expressions}.
 
 from_json_arity3_func() ->
-    {ok,{function, ?LINE, from_json,3, [
-        {clause, ?LINE, [{var, ?LINE, 'Struct'},{var, ?LINE, 'Json'},{var, ?LINE, 'Opts'}], [[{call, ?LINE, {atom, ?LINE, is_list},[{var, ?LINE, 'Opts'}]}]], [
-            {call, ?LINE, {atom, ?LINE, from_json}, [{var, ?LINE, 'Json'}, {var, ?LINE, 'Opts'}, {var, ?LINE, 'Struct'}]}
-        ]},
-        {clause, ?LINE, [{var, ?LINE, 'Json'},{var, ?LINE, 'Opts'},{var, ?LINE, 'Struct'}], [], [
-            {match, ?LINE, {var, ?LINE, 'Json2'}, {call, ?LINE, {atom, ?LINE, scrub_keys},[{var, ?LINE, 'Json'}]}},
-            {call, ?LINE, {remote, ?LINE, {atom, ?LINE, rec2json},{atom, ?LINE, from_json}}, [{var, ?LINE, 'Struct'}, {var, ?LINE, 'Json2'}, {var, ?LINE, 'Opts'}]}
-        ]}
-    ]}}.
-
+    Gaurds = [[
+        {call, ?LINE, {atom, ?LINE, is_tuple}, [{var, ?LINE, 'Struct'}]},
+        {call, ?LINE, {atom, ?LINE, is_map}, [{var, ?LINE, 'Json'}]},
+        {call, ?LINE, {atom, ?LINE, is_list}, [{var, ?LINE, 'Opts'}]}
+    ]],
+    RemoteCall = {call, ?LINE, {remote, ?LINE, {atom, ?LINE, rec2json},{atom,?LINE,from_json}}, [{var, ?LINE, 'Struct'}, {var, ?LINE, 'Json'}, {var, ?LINE, 'Opts'}]},
+    ArgOrders = [
+        ['Struct', 'Json', 'Opts'],
+        ['Struct', 'Opts', 'Json'],
+        ['Json', 'Struct', 'Opts'],
+        ['Json', 'Opts', 'Struct'],
+        ['Opts', 'Json', 'Struct'],
+        ['Opts', 'Struct', 'Json']
+    ],
+    Clauses = lists:map(fun(Args) ->
+        Vars = [{var, ?LINE, A} || A <- Args],
+        {clause, ?LINE, Vars, Gaurds, [RemoteCall]}
+    end, ArgOrders),
+    {ok, {function, ?LINE, from_json, 3, Clauses}}.

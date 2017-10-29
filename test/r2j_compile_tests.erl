@@ -4,78 +4,13 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("test/r2j_compile_tests.hrl").
 -include("test/test_rec.hrl").
+-include("prop_test_rec.hrl").
 
+-type point() :: {float(), float()}.
+-export_type([point/0]).
 -export([point/1]).
 
 -define(TEST_DIRECTORY, "test/").
-
-
-compile_strings_test_() -> [
-    {"simple record compile", fun() ->
-        r2j_compile:scan_string("-record(cst1, {}).", [{output_dir, ?TEST_DIRECTORY}]),
-        code:load_file(cst1),
-        ?assert(erlang:function_exported(cst1, to_json, 1))
-    end},
-
-    {"record with a type compile", fun() ->
-        r2j_compile:scan_string("-record(cst2, {f :: pos_integer()}).", [{output_dir, ?TEST_DIRECTORY}]),
-        code:load_file(cst2),
-        ?assert(erlang:function_exported(cst2, to_json, 1))
-    end},
-
-    {"two records", fun() ->
-        r2j_compile:scan_string("-record(cst3_1, {f}).\n-record(cst3_2, {baz :: integer()}).", [{output_dir, ?TEST_DIRECTORY}]),
-        code:load_file(cst3_1),
-        code:load_file(cst3_2),
-        ?assert(erlang:function_exported(cst3_1, to_json, 1)),
-        ?assert(erlang:function_exported(cst3_2, to_json, 1))
-    end},
-
-    {"a type and a record", fun() ->
-        r2j_compile:scan_string("-type foobar() :: {pos_integer(), integer()}.\n-record(cst4, {foobar :: [foobar()]}).", [{output_dir, ?TEST_DIRECTORY}]),
-        code:load_file(cst4),
-        ?assert(erlang:function_exported(cst4, to_json, 1))
-    end},
-
-    {"many different field repesentations", generator, fun() ->
-        Types = [":: basic()", ":: atom", ":: 1", ":: exported:type()",
-            ":: basic(1)", ":: exported:type(1)", ":: basic(basic(atom))",
-            ":: exported:type(basic())", ":: exported:type(basic(1))",
-            "= r2j:default() :: r2j:special()",
-            "= r2j:special(3) :: r2j:special(3)",
-            "= r2j:outer(r2j:special(3))",
-            ":: r2j:special(3) | r2j:special(4)"],
-        Seq = lists:seq(1, length(Types)),
-        Keyed = lists:zip(Seq, Types),
-        Keyed2 = [{integer_to_list(N), V} || {N, V} <- Keyed],
-        types_gen(Keyed2)
-    end},
-
-    {"has an accessor function", fun() ->
-        r2j_compile:scan_string("-record(cst5, {f}).", [{output_dir, ?TEST_DIRECTORY}]),
-        code:load_file(cst5),
-        ?assert(erlang:function_exported(cst5, f, 1))
-    end},
-
-    {"no accessor when opted out", fun() ->
-        r2j_compile:scan_string("-record(cst6, {f}).", [{generate_accessors, false}, {output_dir, ?TEST_DIRECTORY}]),
-        code:load_file(cst6),
-        ?assertNot(erlang:function_exported(cst6, f, 1))
-    end},
-
-    {"record with various defaults defined", 
-      lists:map(fun(DefaultStr) ->
-        {DefaultStr, fun() ->
-          Str = "-record(cst7, { f = " ++ DefaultStr ++ " }).",
-          r2j_compile:scan_string(Str, [{output_dir, ?TEST_DIRECTORY}])
-        end}
-      end, ["1", "{1}", "\"string\"", "atom", "mod:func()", "mod:func(1)",
-        "[1, 2, 3]", "{1, {}}", "[{}, 1, \"string\"]",
-        "mod:func({})",
-        "{{}}", "[a|b]"])
-    }
-
-    ].
 
 types_gen([]) ->
     [];
@@ -95,8 +30,8 @@ types_gen([{Nth, Type} | Tail]) ->
 parse_transform_test_() ->
     [
 
-        % while the mdule is likely already compiled once, we don't want to
-        % have to potenially keep doing a clean just to ensure changes to the
+        % while the module is likely already compiled once, we don't want to
+        % have to potentially keep doing a clean just to ensure changes to the
         % parse transform don't break stuff, thus the recompiles here.
         {"compile", fun() ->
             Got = compile:file(?TEST_DIRECTORY ++ "test_rec", [{outdir, ?TEST_DIRECTORY}]),
@@ -207,12 +142,12 @@ parse_transform_test_() ->
         end},
 
         {"default property conversion works as expected", fun() ->
-            InitialJson = [{}],
+            InitialJson = #{},
             {ok, Record} = default_property:default_property(InitialJson),
             1 = default_property:f1(Record),
             <<"hi">> = default_property:f2(Record),
             EmptyRec = default_property:f1(undefined, default_property:f2(undefined, Record)),
-            {ok, [{}]} = default_property:default_property(EmptyRec)
+            {ok, #{}} = default_property:default_property(EmptyRec)
         end},
 
         {"property name can be altered", fun() ->
@@ -221,12 +156,12 @@ parse_transform_test_() ->
         end},
 
         {"renamed property works like default", fun() ->
-            InitialJson = [{}],
+            InitialJson = #{},
             {ok, Record} = renamed_property:goober(InitialJson),
             42 = renamed_property:f1(Record),
             hello = renamed_property:f2(Record),
             EmptyRec = renamed_property:f1(undefined, renamed_property:f2(undefined, Record)),
-            {ok, [{}]} = renamed_property:goober(EmptyRec)
+            {ok, #{}} = renamed_property:goober(EmptyRec)
 
         end},
 
@@ -237,301 +172,298 @@ parse_transform_test_() ->
 
     ].
 
-feature_test_() ->
-    {setup, fun() ->
-        r2j_compile:scan_file(?TEST_DIRECTORY ++ "r2j_compile_tests.hrl", [{output_dir, ?TEST_DIRECTORY}])
-    end, fun(_) ->
-        ok
-    end, fun(_) -> [
-
-        {"to json as parameterized module", fun() ->
-            Record = #included{},
-            ?assertEqual([{}], Record:to_json())
+feature_test_() -> [
+        {"to json", fun() ->
+            Record = #prop_test_rec{},
+            ?assertEqual(#{prop_int_with_default => 1, prop_user_type_default => 3}, prop_test_rec:to_json(Record))
         end},
 
-        {"to json as regular module", fun() ->
-            Record = #included{},
-            ?assertEqual([{}], included:to_json(Record))
-        end},
-
-        {"to json as parametrized module, undefined is null", fun() ->
-            Record = #included{},
-            ?assertEqual([{field, null}], Record:to_json([{null_is_undefined}]))
-        end},
-
-        {"To json as regular module, undefined is null", fun() ->
-            Record = #included{},
-            ?assertEqual([{field, null}], included:to_json(Record, [{null_is_undefined}]))
+        {"to json, undefined is null", fun() ->
+            Record = #prop_test_rec{},
+            [prop_test_rec | OtherValues] = tuple_to_list(Record),
+            NulledValues = lists:map(fun
+                (undefined) -> null;
+                (V) -> V
+            end, OtherValues),
+            Json = prop_test_rec:to_json([{null_is_undefined}], Record),
+            JsonAsList = maps:to_list(Json),
+            Winnowed = lists:foldl(fun({_, V}, Acc) ->
+                Acc -- [V]
+            end, NulledValues, JsonAsList),
+            ?assertEqual([], Winnowed)
         end},
 
         {"To json with adding prop mutator", fun() ->
-            Record = #included{},
-            Expected = [{newage, <<"hi">>}],
-            ?assertEqual(Expected, included:to_json(Record, [{newage, <<"hi">>}]))
+            Record = #prop_test_rec{},
+            ?assertMatch(#{newage := <<"hi">>}, prop_test_rec:to_json(Record, [{newage, <<"hi">>}]))
+        end},
+
+        {"To json with adding prop mutator as map", fun() ->
+            Record = #prop_test_rec{},
+            ?assertMatch(#{foo := <<"bar">>, baz := 3}, prop_test_rec:to_json(Record, [#{foo => <<"bar">>, baz => 3}]))
         end},
 
         {"To json with removing prop mutator", fun() ->
-            Record = #included{field = <<"hi">>},
-            Expected = [{}],
-            ?assertEqual(Expected, included:to_json(Record, [field]))
+            Record = #prop_test_rec{prop_integer = 75},
+            Json = prop_test_rec:to_json(Record, [prop_integer]),
+            ?assertEqual(error, maps:find(prop_integer, Json))
         end},
 
         {"To json with arity 1 fun mutator", fun() ->
-            Mutator = fun(J) ->
-                ?assertEqual([], J),
-                []
+            Mutator1 = fun(_) ->
+               #{}
             end,
-            Expected = [{}],
-            Record = #included{},
-            ?assertEqual(Expected, included:to_json(Record, [Mutator]))
+            Mutator2 = fun(J) ->
+                J#{fart_jokes => true}
+            end,
+            Expected = #{fart_jokes => true},
+            Record = #prop_test_rec{},
+            ?assertEqual(Expected, prop_test_rec:to_json(Record, [Mutator1, Mutator2]))
         end},
 
         {"To json with arity 2 fun mutator", fun() ->
-            Record = #included{},
-            Mutator = fun(J, R) ->
-                ?assertEqual([], J),
+            Record = #prop_test_rec{},
+            Mutator = fun(_, R) ->
                 ?assertEqual(Record, R),
-                []
+                #{flerb => 5}
             end,
-            ?assertEqual([{}], included:to_json(Record, [Mutator]))
+            ?assertEqual(#{flerb => 5}, prop_test_rec:to_json(Record, [Mutator]))
         end},
 
         {"To json with all mutators", fun() ->
-            Record = #included{field = 3},
+            Record = #prop_test_rec{prop_integer = 3},
             A1 = fun(J) ->
-                ?assertEqual([{new1, <<"hi">>}], J),
-                [{mut1, 1} | J]
+                ?assertMatch(#{new1 := <<"hi">>}, J),
+                J#{mut1 => 1}
             end,
             A2 = fun(J, R) ->
                 ?assertEqual(Record, R),
-                [{mut2, 2} | J]
+                J#{mut2 => 2}
             end,
-            Mutators = [field, {new1, <<"hi">>}, A1, A2],
-            Expected = [{mut2, 2}, {mut1, 1}, {new1, <<"hi">>}],
-            ?assertEqual(Expected, included:to_json(Record, Mutators))
+            Mutators = [field, prop_int_with_default, prop_user_type_default, prop_integer, {new1, <<"hi">>}, A1, A2, #{new2 => 94, new3 => <<"yo">>}],
+            Expected = #{mut2 => 2, mut1 => 1, new1 => <<"hi">>, new2 => 94, new3 => <<"yo">>},
+            ?assertEqual(Expected, prop_test_rec:to_json(Record, Mutators))
         end},
 
         {"To json, sub record encoded as empty obj", fun() ->
-            IncRec = #included{},
-            Record = #feature{default = undefined, default_integer = undefined, record_type = IncRec},
-            ?assertEqual([{record_type, [{}]}], Record:to_json([included_records]))
+            IncRec = #prop_test_rec_inner{},
+            Record = #prop_test_rec{prop_record_one_inner = IncRec},
+            ?assertMatch(#{prop_record_one_inner := #{}}, prop_test_rec:to_json(Record, []))
         end},
 
         {"To json, sub record fully encoded", fun() ->
-            IncRec = #included{field = <<"field">>},
-            Record = #feature{default = undefined, default_integer = undefined, record_type = IncRec},
-            ?assertEqual([{record_type, [{field, <<"field">>}]}], Record:to_json([included_records]))
+            IncRec = #prop_test_rec_inner{f = 7},
+            Record = #prop_test_rec{prop_record_one_inner = IncRec},
+            ?assertMatch(#{prop_record_one_inner := #{f := 7}}, prop_test_rec:to_json(Record))
         end},
 
         {"To json, atom becomes binary", fun() ->
           ?debugFmt("~p", [proplists:get_value(r2j_compile, code:all_loaded())]),
-          Record = #included{field = 'an atom'},
-          ?assertEqual([{field, <<"an atom">>}], Record:to_json())
+          Record = #prop_test_rec{prop_atoms = init},
+          ?assertMatch(#{prop_atoms := <<"init">>}, prop_test_rec:to_json(Record))
         end},
 
         {"To json, true does not become binary", fun() ->
           ?debugFmt("~p", [proplists:get_value(r2j_compile, code:all_loaded())]),
-          Record = #included{field = true},
-          ?assertEqual([{field, true}], Record:to_json())
+          Record = #prop_test_rec{prop_boolean = true},
+          ?assertMatch(#{prop_boolean := true}, prop_test_rec:to_json(Record))
         end},
 
         {"To json, false does not become binary", fun() ->
           ?debugFmt("~p", [proplists:get_value(r2j_compile, code:all_loaded())]),
-          Record = #included{field = false},
-          ?assertEqual([{field, false}], Record:to_json())
+          Record = #prop_test_rec{prop_boolean = false},
+          ?assertMatch(#{prop_boolean := false}, prop_test_rec:to_json(Record))
         end},
 
         {"To json, empty lists stay lists", fun() ->
-          Record = #included{field = []},
-          ?assertEqual([{field, []}], Record:to_json())
-        end},
-
-        {"To json, empty object stay objects", fun() ->
-          Record = #included{field = [{}]},
-          ?assertEqual([{field, [{}]}], Record:to_json())
+          Record = #prop_test_rec{prop_list_one = []},
+          ?assertMatch(#{prop_list_one := []}, prop_test_rec:to_json(Record))
         end},
 
         {"from json with binary fields", fun() ->
-            Expected = #included{field = <<"field">>},
-            ?assertEqual({ok, Expected}, included:from_json([{<<"field">>, <<"field">>}]))
+            Expected = #prop_test_rec{prop_binary = <<"field">>},
+            {ok, Got} = prop_test_rec:from_json(#{<<"prop_binary">> => <<"field">>}),
+            ?assertEqual(<<"field">>, Got#prop_test_rec.prop_binary),
+            ?assertEqual({ok, Expected}, prop_test_rec:from_json(#{<<"prop_binary">> => <<"field">>}))
         end},
 
         {"from json with atom field", fun() ->
-            Expected = #included{field = <<"field">>},
-            ?assertEqual({ok, Expected}, included:from_json([{field, <<"field">>}]))
+            Expected = #prop_test_rec{prop_binary = <<"field">>},
+            ?assertEqual({ok, Expected}, prop_test_rec:from_json(#{prop_binary => <<"field">>}))
         end},
 
         {"from empty json object", fun() ->
-            Expected = #included{},
-            ?assertEqual({ok, Expected}, included:from_json([{}]))
+            Expected = #prop_test_rec{},
+            ?assertEqual({ok, Expected}, prop_test_rec:from_json(#{}))
         end},
 
         {"from json object with unspecified field", fun() ->
-            Expected = #included{},
-            Json = [{thang, 71}],
-            ?assertEqual({ok, Expected}, included:from_json(Json))
+            Expected = #prop_test_rec{},
+            Json = #{thang => 71},
+            ?assertEqual({ok, Expected}, prop_test_rec:from_json(Json))
         end},
 
         {"from json with seed record", fun() ->
-            Seed = #included{field = 32},
-            ?assertEqual({ok, Seed}, included:from_json(Seed, [{}]))
-        end},
-
-        {"from json with seed record as parameterized module", fun() ->
-            Seed = #included{field = 32},
-            ?assertEqual({ok, Seed}, Seed:from_json([{}]))
+            Seed = #prop_test_rec{prop_integer = 32},
+            ?assertEqual({ok, Seed}, prop_test_rec:from_json(Seed, #{}))
         end},
 
         {"from json with null as null", fun() ->
-            Expected = #included{field = null},
-            Json = [{field, null}],
-            ?assertEqual({ok, Expected}, included:from_json(Json))
+            Expected = #prop_test_rec{prop_integer = null},
+            Json = #{prop_integer => null},
+            ?assertEqual({ok, Expected, [prop_integer]}, prop_test_rec:from_json(Json))
         end},
 
         {"from json with null as undefined", fun() ->
-            Expected = #included{field = undefined},
-            Json = [{field, null}],
-            ?assertEqual({ok, Expected}, included:from_json(Json, [null_is_undefined]))
+            Expected = #prop_test_rec{prop_integer = undefined},
+            Json = #{prop_integer => null},
+            ?assertEqual({ok, Expected}, prop_test_rec:from_json(Json, [null_is_undefined]))
         end},
 
         {"from json with options and seed record", [
-            {"parameterized module null is null", fun() ->
-                Expected = #included{field = null},
-                Json = [{field, null}],
-                Seed = #included{field = 32},
-                ?assertEqual({ok, Expected}, Seed:from_json(Json, []))
-            end},
-
-            {"parameterized module null is undefined", fun() ->
-                Expected = #included{field = undefined},
-                Json = [{field, null}],
-                Seed = #included{field = 32},
-                ?assertEqual({ok, Expected}, Seed:from_json(Json, [null_is_undefined]))
-            end},
-
             {"pure module null is null", fun() ->
-                Expected = #included{field = null},
-                Json = [{field, null}],
-                Seed = #included{field = 32},
-                ?assertEqual({ok, Expected}, included:from_json(Json, [], Seed))
+                Expected = #prop_test_rec{prop_null = null},
+                Json = #{prop_null => null},
+                Seed = #prop_test_rec{prop_null = 32},
+                ?assertEqual({ok, Expected}, prop_test_rec:from_json(Json, [], Seed))
             end},
 
             {"pure module null is undefined", fun() ->
-                Expected = #included{field = undefined},
-                Json = [{field, null}],
-                Seed = #included{field = 32},
-                ?assertEqual({ok, Expected}, included:from_json(Json, [null_is_undefined], Seed))
+                Expected = #prop_test_rec{prop_integer = undefined},
+                Json = #{prop_integer =>  null},
+                Seed = #prop_test_rec{prop_integer = 32},
+                ?assertEqual({ok, Expected}, prop_test_rec:from_json(Json, [null_is_undefined], Seed))
             end}
         ]},
 
         {"from json with included record", fun() ->
-            Expected = #feature{record_type = #included{}},
-            Json = [{record_type, [{}]}],
-            ?assertEqual({ok, Expected}, feature:from_json(Json))
+            Expected = #prop_test_rec{prop_record_one_inner = #prop_test_rec_inner{}},
+            Json = #{prop_record_one_inner => #{}},
+            ?assertEqual({ok, Expected}, prop_test_rec:from_json(Json))
         end},
 
         {"from json with a list of included records", fun() ->
-            Expected = #feature{included_records = [
-                #included{field = 1},
-                #included{field = 2}
+            Expected = #prop_test_rec{prop_record_list = [
+                #prop_test_rec_inner{f = 1},
+                #prop_test_rec_inner{f = 2}
             ]},
-            Json = [{included_records, [
-                [{field, 1}],
-                [{field, 2}]
-            ]}],
-            ?assertEqual({ok, Expected}, feature:from_json(Json))
+            Json = #{prop_record_list => [
+                #{f => 1},
+                #{f => 2}
+            ]},
+            ?assertEqual({ok, Expected}, prop_test_rec:from_json(Json))
         end},
 
         {"from json with type mismatch:  integer", fun() ->
-            Expected = #feature{integer_type = <<"hi">>},
-            Json = [{integer_type, <<"hi">>}],
-            ?assertEqual({ok, Expected, [integer_type]}, feature:from_json(Json))
+            Expected = #prop_test_rec{prop_integer = <<"hi">>},
+            Json = #{prop_integer => <<"hi">>},
+            ?assertEqual({ok, Expected, [prop_integer]}, prop_test_rec:from_json(Json))
         end},
 
         {"from json with type mismatch:  boolean", fun() ->
-            Expected = #feature{boolean_type = 42},
-            Json = [{boolean_type, 42}],
-            ?assertEqual({ok, Expected, [boolean_type]}, feature:from_json(Json))
+            Expected = #prop_test_rec{prop_boolean = 42},
+            Json = #{prop_boolean => 42},
+            ?assertEqual({ok, Expected, [prop_boolean]}, prop_test_rec:from_json(Json))
         end},
 
         {"from json with type mismatch:  binary", fun() ->
-            Expected = #feature{binary_type = false},
-            Json = [{binary_type, false}],
-            ?assertEqual({ok, Expected, [binary_type]}, feature:from_json(Json))
+            Expected = #prop_test_rec{prop_binary = false},
+            Json = #{prop_binary => false},
+            ?assertEqual({ok, Expected, [prop_binary]}, prop_test_rec:from_json(Json))
         end},
 
         {"from json with type mismatch: list", fun() ->
-            Expected = #feature{list_type = null},
-            Json = [{list_type, null}],
-            Got = feature:from_json(Json),
-            ?assertEqual({ok, Expected, [list_type]}, Got)
+            Expected = #prop_test_rec{prop_list_one = <<"vida loca">>},
+            Json = #{prop_list_one => <<"vida loca">>},
+            Got = prop_test_rec:from_json(Json),
+            ?assertEqual({ok, Expected, [prop_list_one]}, Got)
         end},
 
         {"from json with type mismatch: list 2", fun() ->
-            Expected = #feature{list_type = [<<"hi">>]},
-            Json = [{list_type, [<<"hi">>]}],
-            ?assertEqual({ok, Expected, [[list_type, 1]]}, feature:from_json(Json))
+            Expected = #prop_test_rec{prop_list_one= [<<"hi">>]},
+            Json = #{prop_list_one => [<<"hi">>]},
+            ?assertEqual({ok, Expected, [[prop_list_one, 1]]}, prop_test_rec:from_json(Json))
         end},
 
         {"from json with type mismatch: null", fun() ->
-            Expected = #feature{null_type = <<"hi">>},
-            Json = [{null_type, <<"hi">>}],
-            ?assertEqual({ok, Expected, [null_type]}, feature:from_json(Json))
+            Expected = #prop_test_rec{prop_null = <<"hi">>},
+            Json = #{prop_null => <<"hi">>},
+            ?assertEqual({ok, Expected, [prop_null]}, prop_test_rec:from_json(Json))
         end},
 
         {"from json with type mismatch:  record_type", fun() ->
-            Expected = #feature{record_type = 33},
-            Json = [{record_type, 33}],
-            ?assertEqual({ok, Expected, [record_type]}, feature:from_json(Json))
+            Expected = #prop_test_rec{prop_record_one_inner = 33},
+            Json = #{prop_record_one_inner => 33},
+            ?assertEqual({ok, Expected, [prop_record_one_inner]}, prop_test_rec:from_json(Json))
+        end},
+
+        {"from json any field causes no warnings", fun() ->
+            Expected = #prop_test_rec{prop_any = #{f => 4}},
+            Json = #{prop_any => #{ f => 4}},
+            ?assertEqual({ok, Expected}, prop_test_rec:from_json(Json))
         end},
 
         {"Accessor functions", fun() ->
-            Record = #feature{},
-            Fields = record_info(fields, feature),
+            UnsetRecord = #prop_test_rec_inner{},
+            Fields = record_info(fields, prop_test_rec_inner),
             NameAndN = lists:zip(Fields, lists:seq(2, length(Fields) + 1)),
+            Record = lists:foldl(fun({_, N}, Acc) ->
+                Rando = rand:uniform(),
+                setelement(N, Acc, Rando)
+            end, UnsetRecord, NameAndN),
             Test = fun({Accessor, Nth}) ->
                 Expected = element(Nth, Record),
-                ?assertEqual(Expected, Record:Accessor()),
-                ?assertEqual(Expected, feature:Accessor(Record))
+                ?assertEqual(Expected, prop_test_rec_inner:Accessor(Record))
             end,
             lists:map(Test, NameAndN)
         end},
 
         {"setter functions", fun() ->
-            Record = #feature{},
-            Fields = record_info(fields, feature),
+            Record = #prop_test_rec{},
+            Fields = record_info(fields, prop_test_rec),
             NameAndN = lists:zip(Fields, lists:seq(2, length(Fields) + 1)),
             Test = fun({Setter, Nth}) ->
-                R1 = Record:Setter(Nth),
-                ?assertEqual(Nth, R1:Setter()),
-                R2 = R1:Setter(goober),
-                ?assertEqual(goober, R2:Setter())
+                R1 = prop_test_rec:Setter(Nth, Record),
+                ?assertEqual(Nth, prop_test_rec:Setter(R1)),
+                R2 = prop_test_rec:Setter(goober, R1),
+                ?assertEqual(goober, prop_test_rec:Setter(R2))
             end,
             lists:map(Test, NameAndN)
         end},
 
         {"Field list function", fun() ->
-            Fields = record_info(fields, feature),
-            Got = feature:field_names(),
+            Fields = record_info(fields, prop_test_rec),
+            Got = prop_test_rec:field_names(),
             ?assertEqual(Fields, Got)
         end},
 
         {"Types list", fun() ->
-            Fields = record_info(fields, feature),
-            Got = feature:field_types(),
-            Types = [{any,[]}, {any,[]},
+            Fields = record_info(fields, prop_test_rec),
+            Got = prop_test_rec:field_types(),
+            Types = [
                 {specific, [undefined, {r2j_type, integer, []}]},
-                {specific, [undefined, {r2j_type, boolean, []}]},
-                {specific, [undefined, {r2j_type, binary, []}]},
-                {specific, [undefined, {list, {specific, [{r2j_type, integer, []}]}}]},
-                {specific, [undefined, null]},
-                {specific, [undefined, {record, included}]},
-                {specific, [{r2j_type, integer, []}]},
-                {specific, [undefined, {r2j_type, integer, []}, {r2j_type, boolean, []}]},
                 {specific, [undefined, {r2j_type, pos_integer, []}]},
+                {specific, [undefined, {r2j_type, integer, []}, {r2j_type, boolean, []}]},
                 {specific, [undefined, init, ready, steady]},
+                {specific, [undefined, {r2j_type, non_neg_integer, []}]},
+                {specific, [undefined, {r2j_type, boolean, []}]},
+                {specific, [undefined, {r2j_type, neg_integer, []}]},
+                {specific, [undefined, {r2j_type, number, []}]},
+                {specific, [undefined, {r2j_type, binary, []}]},
+                {specific, [undefined, {r2j_type, float, []}]},
+                {specific, [undefined, {list, {specific, [{r2j_type, integer, []}]}}]},
+                {specific, [undefined, {record, prop_test_rec_inner}]},
+                {specific, [undefined, {list, {specific, [{record, prop_test_rec_inner}]}}]},
+                {any, [undefined]},
+                {any, []},
+                {specific, [undefined, {list, any}]},
+                {specific, [undefined, {r2j_type, integer, []}]},
                 {specific, [undefined, {r2j_type, integer, [-100, 100]}]},
-                {specific, [{list, {specific, [{record, included}]}}]}
+                {specific, [undefined, {list, {specific, [{r2j_type, integer, [-100, 100]}]}}]},
+                {specific, [undefined, {r2j_compile_tests, point, []}]},
+                {specific, [undefined, null]},
+                {any, [undefined]},
+                {specific, [{r2j_type, integer,[]}]}
             ],
             Zipped = lists:zip(Fields, Types),
             ?assertEqual(length(Zipped), length(Got)),
@@ -541,7 +473,7 @@ feature_test_() ->
             end, GotZipped)
         end}
 
-    ] end}.
+    ].
 
 proper_test_() ->
     Exported = ?MODULE:module_info(exports),
@@ -569,148 +501,138 @@ proper_test_gen([ProperTest | Tail]) ->
 
 %% proper funcs.
 prop_integer() ->
-    r2j_compile:scan_string("-record(prop_integer, {f :: integer()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Val, oneof([int(), real()]),
     begin
-        Expected = {prop_integer, Val},
-        Json = [{f, Val}],
-        Got = prop_integer:from_json(Json),
+        Expected = #prop_test_rec{prop_integer = Val},
+        Json = #{prop_integer => Val},
+        Got = prop_test_rec:from_json(Json),
         if
             is_integer(Val) ->
                 {ok, Expected} == Got;
             true ->
-                {ok, Expected, [f]} == Got
+                {ok, Expected, [prop_integer]} == Got
         end
     end).
 
 prop_pos_integer() ->
-    r2j_compile:scan_string("-record(prop_pos_integer, {f :: pos_integer()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Int, int(),
     begin
-        Expected = {prop_pos_integer, Int},
-        Json = [{f, Int}],
-        Got = prop_pos_integer:from_json(Json),
+        Expected = #prop_test_rec{prop_pos_integer = Int},
+        Json = #{prop_pos_integer => Int},
+        Got = prop_test_rec:from_json(Json),
         if
             Int > 0 ->
                 {ok, Expected} == Got;
             true ->
-                {ok, Expected, [f]} == Got
+                {ok, Expected, [prop_pos_integer]} == Got
         end
     end).
 
 prop_int_or_bool() ->
-    r2j_compile:scan_string("-record(prop_int_or_bool, {f :: integer() | boolean()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(IntOrBool, oneof([int(), bool(), binary(), real()]),
     begin
-        Expected = {prop_int_or_bool, IntOrBool},
-        Json = [{f, IntOrBool}],
-        Got = prop_int_or_bool:from_json(Json),
+        Expected = #prop_test_rec{prop_int_or_bool = IntOrBool},
+        Json = #{prop_int_or_bool => IntOrBool},
+        Got = prop_test_rec:from_json(Json),
         case IntOrBool of
             X when is_integer(X); is_boolean(X) ->
                 {ok, Expected} == Got;
             _ ->
-                {ok, Expected, [f]} == Got
+                {ok, Expected, [prop_int_or_bool]} == Got
         end
     end).
 
 prop_atoms() ->
-    r2j_compile:scan_string("-record(prop_atoms, {f :: 'init' | 'ready' | 'steady'}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Atom, oneof([init, ready, steady, go, stop, hop]),
     begin
-        Json = [{f, list_to_binary(atom_to_list(Atom))}],
-        Got = prop_atoms:from_json(Json),
+        Json = #{prop_atoms => list_to_binary(atom_to_list(Atom))},
+        Got = prop_test_rec:from_json(Json),
         case lists:member(Atom, [init, ready, steady]) of
             true ->
-                Expected = {prop_atoms, Atom},
+                Expected = #prop_test_rec{prop_atoms = Atom},
                 {ok, Expected} == Got;
             false ->
-                Expected = {prop_atoms, list_to_binary(atom_to_list(Atom))},
-                {ok, Expected, [f]} == Got
+                Expected = #prop_test_rec{prop_atoms = list_to_binary(atom_to_list(Atom))},
+                {ok, Expected, [prop_atoms]} == Got
         end
     end).
 
 prop_non_neg_integer() ->
-    r2j_compile:scan_string("-record(prop_non_neg_integer, {f :: non_neg_integer()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Int, int(),
     begin
-        Json = [{f, Int}],
-        Got = prop_non_neg_integer:from_json(Json),
-        Expected = {prop_non_neg_integer, Int},
+        Json = #{prop_non_neg_integer => Int},
+        Got = prop_test_rec:from_json(Json),
+        Expected = #prop_test_rec{prop_non_neg_integer = Int},
         if
             Int < 0 ->
-                {ok, Expected, [f]} == Got;
+                {ok, Expected, [prop_non_neg_integer]} == Got;
             true ->
                 {ok, Expected} == Got
         end
     end).
 
 prop_boolean() ->
-    r2j_compile:scan_string("-record(prop_boolean, {f :: boolean()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Bool, oneof([bool(), goober]),
     begin
-        Expected = {prop_boolean, Bool},
-        Json = [{f, Bool}],
-        Got = prop_boolean:from_json(Json),
+        Expected = #prop_test_rec{prop_boolean = Bool},
+        Json = #{prop_boolean => Bool},
+        Got = prop_test_rec:from_json(Json),
         if
             Bool == goober ->
-                {ok, Expected,[f]} == Got;
+                {ok, Expected,[prop_boolean]} == Got;
             true ->
                 {ok, Expected} == Got
         end
     end).
 
 prop_neg_integer() ->
-    r2j_compile:scan_string("-record(prop_neg_integer, {f :: neg_integer()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Int, int(),
     begin
-        Expected = {prop_neg_integer, Int},
-        Json = [{f, Int}],
-        Got = prop_neg_integer:from_json(Json),
+        Expected = #prop_test_rec{prop_neg_integer = Int},
+        Json = #{prop_neg_integer => Int},
+        Got = prop_test_rec:from_json(Json),
         if
             Int < 0 ->
                 {ok, Expected} == Got;
             true ->
-                {ok, Expected, [f]} == Got
+                {ok, Expected, [prop_neg_integer]} == Got
         end
     end).
 
 prop_number() ->
-    r2j_compile:scan_string("-record(prop_number, {f :: number()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Number, oneof([int(), real(), goober]),
     begin
-        Expected = {prop_number, Number},
-        Json = [{f, Number}],
-        Got = prop_number:from_json(Json),
+        Expected = #prop_test_rec{prop_number = Number},
+        Json = #{prop_number => Number},
+        Got = prop_test_rec:from_json(Json),
         if
             is_number(Number) ->
                 {ok, Expected} == Got;
             true ->
-                {ok, Expected, [f]} == Got
+                {ok, Expected, [prop_number]} == Got
         end
     end).
 
 prop_binary() ->
-    r2j_compile:scan_string("-record(prop_binary, {f :: binary()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Binary, oneof([list(int()), binary()]),
     begin
-        Expected = {prop_binary, Binary},
-        Json = [{f, Binary}],
-        Got = prop_binary:from_json(Json),
+        Expected = #prop_test_rec{prop_binary = Binary},
+        Json = #{prop_binary => Binary},
+        Got = prop_test_rec:from_json(Json),
         if
             is_binary(Binary) ->
                 {ok, Expected} == Got;
             true ->
-                {ok, Expected, [f]} == Got
+                {ok, Expected, [prop_binary]} == Got
         end
     end).
 
 prop_float() ->
-    r2j_compile:scan_string("-record(prop_float, {f :: float()}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Float, oneof([int(), real()]),
     begin
-        Expected = {prop_float, Float},
-        Json = [{f, Float}],
-        Got = prop_float:from_json(Json),
+        Expected = #prop_test_rec{prop_float = Float},
+        Json = #{prop_float => Float},
+        Got = prop_test_rec:from_json(Json),
         if
             is_float(Float) ->
                 {ok, Expected} == Got;
@@ -720,23 +642,22 @@ prop_float() ->
                         {ok, Expected} == Got
                 catch
                     error:bararith ->
-                        {ok, Expected, [f]} == Got
+                        {ok, Expected, [prop_float]} == Got
                 end
         end
     end).
 
 prop_list_one() ->
-    r2j_compile:scan_string("-record(prop_list_one, {f :: [integer()]}).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(List, list(oneof([int(), real()])),
     begin
-        Expected = {prop_list_one, List},
-        Json = [{f, List}],
-        Got = prop_list_one:from_json(Json),
+        Expected = #prop_test_rec{prop_list_one = List},
+        Json = #{prop_list_one => List},
+        Got = prop_test_rec:from_json(Json),
         WarnsFun = fun
             (Item, _Ind, Acc) when is_integer(Item) ->
                 Acc;
             (_Item, Ind, Acc) ->
-                [[f, Ind] | Acc]
+                [[prop_list_one, Ind] | Acc]
         end,
         case fold_ind(WarnsFun, [], List) of
             [] ->
@@ -748,21 +669,19 @@ prop_list_one() ->
     end).
 
 prop_record_one() ->
-    r2j_compile:scan_string("-record(prop_record_one_outer, {f :: #prop_record_one_inner{}}).", [{output_dir, ?TEST_DIRECTORY}]),
-    r2j_compile:scan_string("-record(prop_record_one_inner, {f :: integer()}).", [{output_dir, ?TEST_DIRECTORY}]),
-    ?FORALL(SubRec, oneof([int(), [{}], [{f, oneof([int(), real()])}]]),
+    ?FORALL(SubRec, oneof([int(), #{}, #{prop_record_one_inner => oneof([int(), real()])}]),
     begin
         {Json, Expected, Warns} = case SubRec of
             N when is_integer(N) ->
-                {[{f, N}], {prop_record_one_outer, N}, [f]};
-            [{f, N}] = Obj when is_integer(N) ->
-                {[{f, Obj}], {prop_record_one_outer, {prop_record_one_inner, N}}, false};
-            [{}] ->
-                {[{f, [{}]}], {prop_record_one_outer, {prop_record_one_inner, undefined}}, false};
-            [{f, N}] = Obj ->
-                {[{f, Obj}], {prop_record_one_outer, {prop_record_one_inner, N}}, [[f, f]]}
+                {#{prop_record_one_inner => N}, #prop_test_rec{prop_record_one_inner = N}, [prop_record_one_inner]};
+            #{f := N} = Obj when is_integer(N) ->
+                {#{prop_record_one_inner => Obj}, #prop_test_rec{prop_record_one_inner = #prop_test_rec_inner{f = N}}, false};
+            #{} ->
+                {#{prop_record_one_inner => #{}}, #prop_test_rec{prop_record_one_inner = #prop_test_rec_inner{f = undefined}}, false};
+            #{f := N} = Obj ->
+                {#{prop_record_one_inner => Obj}, #prop_test_rec{prop_record_one_inner = #prop_test_rec_inner{f = N}}, [[prop_record_one_inner, f]]}
         end,
-        Got = prop_record_one_outer:from_json(Json),
+        Got = prop_test_rec:from_json(Json),
         case Warns of
             false ->
                 {ok, Expected} == Got;
@@ -772,60 +691,57 @@ prop_record_one() ->
     end).
 
 prop_user_type() ->
-    r2j_compile:scan_string("-record(prop_user_type, {f :: user_type()} ).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
     begin
-        Json = [{<<"f">>, Val}],
-        Expected = {prop_user_type, Val},
-        Got = prop_user_type:from_json(Json),
-        %?debugFmt("Json: ~p\nExpected: ~p; Got: ~p", [Json, Expected, Got]),
+        Json = #{<<"prop_user_type">> => Val},
+        Expected = #prop_test_rec{prop_user_type = Val},
+        Got = prop_test_rec:from_json(Json),
         {ok, Expected} == Got
     end).
 
 prop_user_type_default() ->
-    r2j_compile:scan_string("-record(prop_user_type_default, {f  = 3 :: user_type()} ).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
     begin
-        Json = [{<<"f">>, Val}],
-        Expected = {prop_user_type_default, Val},
-        Got = prop_user_type_default:from_json(Json),
-        %?debugFmt("Json: ~p\nExpected: ~p; Got: ~p", [Json, Expected, Got]),
+        Json = #{<<"prop_user_type_default">> => Val},
+        Expected = #prop_test_rec{prop_user_type_default = Val},
+        Got = prop_test_rec:from_json(Json),
         {ok, Expected} == Got
     end).
 
 prop_user_type_list() ->
-    r2j_compile:scan_string("-record(prop_user_type_list, {f :: [user_type()]} ).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(List, list({oneof([<<"a">>,<<"b">>,<<"c">>]), oneof([<<"bin">>, int(), real()])}),
     begin
-        Json = [{<<"f">>, List}],
-        Expected = {prop_user_type_list, List},
-        Got = prop_user_type_list:from_json(Json),
+        Json = #{<<"prop_user_type_list">> => List},
+        Expected = #prop_test_rec{prop_user_type_list = List},
+        Got = prop_test_rec:from_json(Json),
         {ok, Expected} == Got
     end).
 
 prop_r2j_integer_type() ->
-    r2j_compile:scan_string("-record(prop_r2j_integer_type, {f :: r2j_type:integer()} ).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
     begin
-        Json = [{<<"f">>, Val}],
-        Rec = {prop_r2j_integer_type, Val},
+        Json = #{<<"prop_r2j_integer_type">> => Val},
+        Rec = #prop_test_rec{prop_r2j_integer_type = Val},
         Expected = if
             is_integer(Val) ->
                 {ok, Rec};
             true ->
-                {ok, Rec, [f]}
+                {ok, Rec, [prop_r2j_integer_type]}
         end,
-        Got = prop_r2j_integer_type:from_json(Json),
+        Trans = fun(J) ->
+            maps:filter(fun(Key, _) -> Key =:= prop_r2j_integer_type end, J)
+        end,
+        Got = prop_test_rec:from_json(Json),
         case Got of
             Expected ->
-                try prop_r2j_integer_type:to_json(Rec) of
+                try prop_test_rec:to_json(Rec, [Trans]) of
                     MaybeGood when is_integer(Val) ->
                        jsx_to_json:to_json(Json,[]) == jsx_to_json:to_json(MaybeGood,[]);
                     NotGood ->
                         ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
                         false
                 catch
-                    error:{badarg, {f, Val, {specific, [undefined, {r2j_type, integer, []}]}}} when not is_integer(Val) ->
+                    error:{badarg, {prop_r2j_integer_type, Val, {specific, [undefined, {r2j_type, integer, []}]}}} when not is_integer(Val) ->
                         true;
                     W:Y ->
                         ?debugFmt("Not the boom I expected: ~p:~p", [W,Y]),
@@ -837,28 +753,30 @@ prop_r2j_integer_type() ->
     end).
 
 prop_r2j_integer_min_max_type() ->
-    r2j_compile:scan_string("-record(prop_r2j_integer_min_max_type, {f :: r2j_type:integer(-100, 100)} ).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Val, oneof([<<"bin">>, int(), real()]),
     begin
-        Json = [{<<"f">>, Val}],
-        Rec = {prop_r2j_integer_min_max_type, Val},
+        Json = #{<<"prop_r2j_integer_min_max_type">> => Val},
+        Rec = #prop_test_rec{prop_r2j_integer_min_max_type = Val},
         Expected = if
             is_integer(Val), -100 =< Val, Val =< 100 ->
                 {ok, Rec};
             true ->
-                {ok, Rec, [f]}
+                {ok, Rec, [prop_r2j_integer_min_max_type]}
         end,
-        Got = prop_r2j_integer_min_max_type:from_json(Json),
+        Got = prop_test_rec:from_json(Json),
+        Trans = fun(J) ->
+            maps:filter(fun(K, _) -> K =:= prop_r2j_integer_min_max_type end, J)
+        end,
         case Got of
             Expected ->
-                try prop_r2j_integer_min_max_type:to_json(Rec) of
+                try prop_test_rec:to_json(Rec, [Trans]) of
                     MaybeGood when is_integer(Val), -100 =< Val, Val =< 100 ->
                         jsx_to_json:to_json(Json,[]) == jsx_to_json:to_json(MaybeGood,[]);
                     NotGood ->
                         ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
                         false
                 catch
-                    error:{badarg, {f, Val, {specific, [undefined, {r2j_type, integer, [-100, 100]}]}}} when not is_integer(Val); Val < -100; 100 < Val ->
+                    error:{badarg, {prop_r2j_integer_min_max_type, Val, {specific, [undefined, {r2j_type, integer, [-100, 100]}]}}} when not is_integer(Val); Val < -100; 100 < Val ->
                         true;
                     W:Y ->
                         ?debugFmt("not the boom I expected: ~p:~p", [W,Y]),
@@ -870,11 +788,10 @@ prop_r2j_integer_min_max_type() ->
     end).
 
 prop_r2j_min_max_listed() ->
-    r2j_compile:scan_string("-record(prop_r2j_integer_min_max_listed, {f :: [r2j_type:integer(-100, 100)]} ).", [{output_dir, ?TEST_DIRECTORY}]),
     ?FORALL(Val, list(oneof([<<"bin">>, int(), real()])),
     begin
-        Json = [{<<"f">>, Val}],
-        Rec = {prop_r2j_integer_min_max_listed, Val},
+        Json = #{<<"prop_r2j_integer_min_max_listed">> => Val},
+        Rec = #prop_test_rec{prop_r2j_integer_min_max_listed = Val},
         FoldFun = fun
             (Int, _Index, Acc) when is_integer(Int), -100 =< Int, Int =< 100 ->
                 Acc;
@@ -886,23 +803,26 @@ prop_r2j_min_max_listed() ->
                 {ok, Rec};
             Warns ->
                 RevWarns = lists:reverse(Warns),
-                TaggedWarns = [[f, N] || N <- RevWarns],
+                TaggedWarns = [[prop_r2j_integer_min_max_listed, N] || N <- RevWarns],
                 {ok, Rec, TaggedWarns}
         end,
-        Got = prop_r2j_integer_min_max_listed:from_json(Json),
+        Got = prop_test_rec:from_json(Json),
         IsGoodValue = lists:all(fun(N) ->
             is_integer(N) andalso -100 =< N andalso N =< 100
         end, Val),
+        Trans = fun(J) ->
+            maps:filter(fun(Key,_) -> Key =:= prop_r2j_integer_min_max_listed end, J)
+        end,
         case Got of
             Expected ->
-                try prop_r2j_integer_min_max_listed:to_json(Rec) of
+                try prop_test_rec:to_json(Rec, [Trans]) of
                     Good when IsGoodValue ->
                         jsx_to_json:to_json(Json,[]) == jsx_to_json:to_json(Good,[]);
                     NotGood ->
                         ?debugFmt("expected a boom due to ~p but got ~p", [Val, NotGood]),
                         false
                 catch
-                    error:{badarg, {f, Val, {specific, [undefined, {list, {specific, [{r2j_type, integer, [-100, 100]}]}}]}}} when not IsGoodValue ->
+                    error:{badarg, {prop_r2j_integer_min_max_listed, Val, {specific, [undefined, {list, {specific, [{r2j_type, integer, [-100, 100]}]}}]}}} when not IsGoodValue ->
                         true;
                     W:Y ->
                         ?debugFmt("not the boom I was expected: ~p:~p", [W,Y]),
@@ -915,31 +835,28 @@ prop_r2j_min_max_listed() ->
     end).
 
 prop_r2j_type_translation() ->
-    r2j_compile:scan_string("-record(type_translation, {p :: r2j_compile_tests:point()} ).", [{output_dir, ?TEST_DIRECTORY}]),
-        ?FORALL({X, Y} = RecVal, {int(), int()},
-        begin
-        Json = [{<<"p">>, [{<<"x">>, X}, {<<"y">>, Y}]}],
-        Rec = {type_translation, RecVal},
-        Got = type_translation:from_json(Json),
-        {ok, Rec} == Got andalso jsx_to_json:to_json(Json,[]) == jsx_to_json:to_json(type_translation:to_json(Rec),[])
+    ?FORALL({X, Y} = RecVal, {int(), int()}, begin
+        Json = #{<<"type_translation">> => #{<<"x">> => X, <<"y">> => Y}},
+        Rec = #prop_test_rec{type_translation = RecVal},
+        Got = prop_test_rec:from_json(Json),
+        FilterToOnlyTranslation = fun(J) ->
+            maps:filter(fun(Key, _) -> Key =:= type_translation end, J)
+        end,
+        {ok, Rec} == Got andalso jsx_to_json:to_json(Json,[]) == jsx_to_json:to_json(prop_test_rec:to_json(Rec, [FilterToOnlyTranslation]),[])
     end).
 
-fold_ind(Fun, Acc, List) ->
-    fold_ind(Fun, Acc, 1, List).
-
-fold_ind(_Fun, Acc, _Ind, []) ->
-    Acc;
-fold_ind(Fun, Acc, Ind, [Item | Tail]) ->
-    Acc2 = Fun(Item, Ind, Acc),
-    fold_ind(Fun, Acc2, Ind + 1, Tail).
+fold_ind(Fun, InitAcc, List) ->
+    {OutAcc, _} = lists:foldl(fun(Elem, {Acc, Ind}) ->
+        NewAcc = Fun(Elem, Ind, Acc),
+        {NewAcc, Ind + 1}
+    end, {InitAcc, 1}, List),
+    OutAcc.
 
 point({X,Y}) ->
-    {ok, [{x,X},{y,Y}]};
+    {ok, #{x => X, y => Y}};
 
-point(List) when is_list(List) ->
-    X = proplists:get_value(x, List, proplists:get_value(<<"x">>, List)),
-    Y = proplists:get_value(y, List, proplists:get_value(<<"y">>, List)),
-    {ok, {X,Y}};
+point(#{<<"x">> := X, <<"y">> := Y}) when is_number(X), is_number(Y) ->
+    {ok, {X, Y}};
 
 point(_) ->
     error.

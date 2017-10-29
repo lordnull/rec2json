@@ -23,7 +23,7 @@ is_careful_test() -> ?assert(true).
 
 to_json_test() ->
 	Rec = #careful_tests{one_field = <<"yo">>},
-	?assertEqual([{}], to_json(Rec)).
+	?assertEqual(#{}, to_json(Rec)).
 
 careful_tests(Value) ->
 	{ok, ok, Value}.

@@ -1,0 +1,1 @@
+-record(prop_test_rec_inner, {f :: integer()}).
