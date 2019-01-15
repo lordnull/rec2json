@@ -63,11 +63,39 @@ defaults_test_() ->
     ],
 
     lists:map(fun({Field, Value}) ->
-        Name = iolist_to_binary(io_lib:format("ensure ~p is ~p", [Field, Value])),
-        {Name, fun() ->
-            ?assertEqual(Value, erlang:apply(Rec, Field, []))
-        end}
+        create_default_test(Field, Value, Rec)
     end, Expectations).
+
+-ifdef(OTP_RELEASE).
+
+    -if(?OTP_RELEASE >= 21).
+
+create_default_test(Field, Value, Rec) ->
+    Name = iolist_to_binary(io_lib:format("ensure ~p is ~p", [Field, Value])),
+    {Name, fun() ->
+        ?assertEqual(Value, erlang:apply(?MODULE, Field, [Rec]))
+    end}.
+
+    -else.
+
+create_default_test(Field, Value, Rec) ->
+    Name = iolist_to_binary(io_lib:format("ensure ~p is ~p", [Field, Value])),
+    {Name, fun() ->
+        ?assertEqual(Value, erlang:apply(?MODULE, Field, [Rec])),
+        ?assertEqual(Value, erlang:apply(Rec, Field, []))
+    end}.
+
+    -endif.
+
+-else.
+
+create_default_test(Field, Value, Rec) ->
+    Name = iolist_to_binary(io_lib:format("ensure ~p is ~p", [Field, Value])),
+    {Name, fun() ->
+        ?assertEqual(Value, erlang:apply(?MODULE, Field, [Rec])),
+        ?assertEqual(Value, erlang:apply(Rec, Field, []))
+    end}.
 
 -endif.
 
+-endif.
